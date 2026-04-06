@@ -9,6 +9,7 @@ import Veille from './components/Veille'
 import VeilleConfig from './components/VeilleConfig'
 import Matching from './components/Matching'
 import GlobalSearch from './components/GlobalSearch'
+import ChatBot from './components/ChatBot'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
@@ -259,6 +260,9 @@ export default function App() {
           ))}
         </nav>
       )}
+
+      {/* ─── AI CHATBOT ─── */}
+      <ChatBot />
 
       <style>{`
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
