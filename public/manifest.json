@@ -1,0 +1,21 @@
+{
+  "name": "CRM Joker Team",
+  "short_name": "Joker CRM",
+  "description": "CRM Joker Team — La carte pour réussir. Gestion contacts, opportunités, candidats, veille IT et matching IA.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#122a33",
+  "theme_color": "#122a33",
+  "icons": [
+    {
+      "src": "/logo-joker-team.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "fr",
+  "dir": "ltr"
+}

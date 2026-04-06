@@ -9,250 +9,228 @@ import Veille from './components/Veille'
 import VeilleConfig from './components/VeilleConfig'
 import Matching from './components/Matching'
 
+const TABS = [
+  { id: 'dashboard', icon: '📊', label: 'Dashboard' },
+  { id: 'contacts', icon: '👥', label: 'Contacts' },
+  { id: 'opportunites', icon: '💼', label: 'Opportunités' },
+  { id: 'candidats', icon: '👔', label: 'Candidats' },
+  { id: 'veille', icon: '🔍', label: 'Veille' },
+  { id: 'matching', icon: '🤖', label: 'Matching IA' },
+  { id: 'config', icon: '⚙️', label: 'Paramètres' }
+]
+
 export default function App() {
-  const [session, setSession] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [user, setUser] = useState(null)
   const [activeTab, setActiveTab] = useState('dashboard')
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setLoading(false)
+      setUser(session?.user ?? null)
     })
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null)
     })
 
-    return () => subscription.unsubscribe()
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768)
+      if (window.innerWidth >= 768) setMenuOpen(false)
+    }
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      subscription.unsubscribe()
+      window.removeEventListener('resize', handleResize)
+    }
   }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
+    setUser(null)
   }
 
-  function handleTabChange(tab) {
-    setActiveTab(tab)
-    setMobileMenuOpen(false) // Fermer le menu mobile après sélection
+  function switchTab(tabId) {
+    setActiveTab(tabId)
+    setMenuOpen(false)
   }
 
-  if (loading) {
-    return (
-      <div className="loading">
-        <div className="loading-spinner"></div>
-      </div>
-    )
+  if (!user) {
+    return <Login onLogin={setUser} />
   }
-
-  if (!session) {
-    return <Login />
-  }
-
-  const tabs = [
-    { id: 'dashboard', icon: '📊', label: 'Dashboard' },
-    { id: 'contacts', icon: '👥', label: 'Contacts' },
-    { id: 'opportunites', icon: '💼', label: 'Opportunités' },
-    { id: 'candidats', icon: '👔', label: 'Candidats' },
-    { id: 'veille', icon: '📰', label: 'Veille' },
-    { id: 'matching', icon: '🤖', label: 'Matching IA' },
-    { id: 'parametres', icon: '⚙️', label: 'Paramètres' }
-  ]
-
-  const TabButton = ({ tab, isMobile = false }) => (
-    <button
-      onClick={() => handleTabChange(tab.id)}
-      style={{
-        background: activeTab === tab.id 
-          ? 'rgba(255, 255, 255, 0.2)' 
-          : 'transparent',
-        color: '#fff',
-        border: 'none',
-        padding: isMobile ? '1rem' : '0.75rem 1.5rem',
-        borderRadius: '8px',
-        cursor: 'pointer',
-        fontWeight: activeTab === tab.id ? 700 : 500,
-        fontSize: isMobile ? '1rem' : '0.95rem',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.5rem',
-        width: isMobile ? '100%' : 'auto',
-        justifyContent: isMobile ? 'flex-start' : 'center',
-        transition: 'all 0.2s',
-        whiteSpace: 'nowrap'
-      }}
-    >
-      <span>{tab.icon}</span>
-      <span>{tab.label}</span>
-    </button>
-  )
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f8fafc' }}>
-      {/* Header */}
+    <div style={{ minHeight: '100vh', background: '#f1f5f9' }}>
+      {/* ─── HEADER ─── */}
       <header style={{
-        background: 'linear-gradient(135deg, #2C4F5A 0%, #1a3540 100%)',
-        color: '#fff',
-        padding: '1rem',
-        position: 'sticky',
-        top: 0,
-        zIndex: 100,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+        background: 'linear-gradient(135deg, #122a33 0%, #1a3a45 100%)',
+        borderBottom: '3px solid #D4AF37',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+        position: 'relative', zIndex: 300
       }}>
         <div style={{
-          maxWidth: '1400px',
-          margin: '0 auto',
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center'
+          maxWidth: '1400px', margin: '0 auto',
+          padding: isMobile ? '0.6rem 1rem' : '0.75rem 2rem',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center'
         }}>
-          {/* Logo */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '0.75rem',
-            cursor: 'pointer'
-          }}
-          onClick={() => handleTabChange('dashboard')}
-          >
-            <span style={{ fontSize: '1.8rem' }}>🃏</span>
-            <div>
-              <div style={{ 
-                fontSize: '1.2rem', 
-                fontWeight: 700,
-                lineHeight: 1.2
-              }}>
-                Joker Team
+          <img src="/logo-joker-team.png" alt="Joker Team"
+            style={{ height: isMobile ? '42px' : '65px', width: 'auto', cursor: 'pointer' }}
+            onClick={() => switchTab('dashboard')}
+            onError={(e) => { e.target.style.display = 'none' }} />
+
+          {!isMobile && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 500 }}>{user.email}</div>
+                <div style={{ color: '#64808b', fontSize: '0.7rem' }}>Connecté</div>
               </div>
-              <div style={{ 
-                fontSize: '0.7rem', 
-                color: '#D4AF37',
-                letterSpacing: '1px'
-              }}>
-                LA CARTE POUR RÉUSSIR
-              </div>
+              <button onClick={handleLogout} style={{
+                background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)',
+                color: '#D4AF37', padding: '0.45rem 1.2rem', borderRadius: '6px',
+                cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600
+              }}>Déconnexion</button>
             </div>
-          </div>
+          )}
 
-          {/* Navigation Desktop */}
-          <nav className="hide-mobile" style={{ 
-            display: 'flex', 
-            gap: '0.5rem',
-            alignItems: 'center'
-          }}>
-            {tabs.map(tab => (
-              <TabButton key={tab.id} tab={tab} />
-            ))}
-            <button
-              onClick={handleLogout}
-              style={{
-                background: 'rgba(220, 38, 38, 0.2)',
-                color: '#fff',
-                border: 'none',
-                padding: '0.75rem 1.5rem',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: 600,
-                marginLeft: '1rem'
-              }}
-            >
-              🚪 Déconnexion
-            </button>
-          </nav>
-
-          {/* Hamburger Menu (Mobile) */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="hide-desktop"
-            style={{
-              background: 'rgba(255, 255, 255, 0.2)',
-              border: 'none',
-              color: '#fff',
-              fontSize: '1.5rem',
-              cursor: 'pointer',
-              padding: '0.5rem 0.75rem',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '50px',
-              height: '50px'
-            }}
-          >
-            {mobileMenuOpen ? '✕' : '☰'}
-          </button>
+          {isMobile && (
+            <button onClick={() => setMenuOpen(!menuOpen)} style={{
+              background: 'none', border: 'none', color: '#D4AF37',
+              fontSize: '1.6rem', cursor: 'pointer', padding: '0.25rem', lineHeight: 1
+            }}>{menuOpen ? '✕' : '☰'}</button>
+          )}
         </div>
-
-        {/* Menu Mobile */}
-        {mobileMenuOpen && (
-          <nav 
-            className="hide-desktop"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '0.5rem',
-              marginTop: '1rem',
-              paddingTop: '1rem',
-              borderTop: '1px solid rgba(255,255,255,0.2)',
-              animation: 'slideDown 0.3s ease-out'
-            }}
-          >
-            {tabs.map(tab => (
-              <TabButton key={tab.id} tab={tab} isMobile />
-            ))}
-            <button
-              onClick={handleLogout}
-              style={{
-                background: 'rgba(220, 38, 38, 0.2)',
-                color: '#fff',
-                border: 'none',
-                padding: '1rem',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                fontWeight: 600,
-                fontSize: '1rem',
-                marginTop: '0.5rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem'
-              }}
-            >
-              <span>🚪</span>
-              <span>Déconnexion</span>
-            </button>
-          </nav>
-        )}
       </header>
 
-      {/* Main Content */}
+      {/* ─── DESKTOP NAV ─── */}
+      {!isMobile && (
+        <nav style={{
+          background: '#fff', borderBottom: '1px solid #e2e8f0',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+          position: 'sticky', top: 0, zIndex: 200
+        }}>
+          <div style={{
+            maxWidth: '1400px', margin: '0 auto', padding: '0 2rem',
+            display: 'flex', gap: '0.25rem', overflowX: 'auto'
+          }}>
+            {TABS.map(tab => (
+              <button key={tab.id} onClick={() => switchTab(tab.id)} style={{
+                background: activeTab === tab.id ? 'linear-gradient(135deg, #122a33, #1a3a45)' : 'transparent',
+                color: activeTab === tab.id ? '#fff' : '#475569',
+                border: 'none',
+                borderBottom: activeTab === tab.id ? '3px solid #D4AF37' : '3px solid transparent',
+                padding: '0.85rem 1.2rem', cursor: 'pointer', fontSize: '0.88rem',
+                fontWeight: activeTab === tab.id ? 600 : 500,
+                display: 'flex', alignItems: 'center', gap: '0.4rem',
+                borderRadius: activeTab === tab.id ? '6px 6px 0 0' : '0', whiteSpace: 'nowrap'
+              }}>
+                <span>{tab.icon}</span><span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
+        </nav>
+      )}
+
+      {/* ─── MOBILE SLIDE-DOWN NAV ─── */}
+      {isMobile && menuOpen && (
+        <>
+          <div style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
+            zIndex: 250, animation: 'fadeIn 0.2s ease'
+          }} onClick={() => setMenuOpen(false)} />
+
+          <nav style={{
+            position: 'fixed', top: 0, left: 0, right: 0,
+            background: '#122a33', borderBottom: '3px solid #D4AF37',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.4)', zIndex: 260,
+            animation: 'slideDown 0.25s ease', maxHeight: '100vh', overflowY: 'auto'
+          }}>
+            <div style={{
+              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              padding: '0.75rem 1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)'
+            }}>
+              <img src="/logo-joker-team.png" alt="Joker Team" style={{ height: '36px' }}
+                onError={(e) => { e.target.style.display = 'none' }} />
+              <button onClick={() => setMenuOpen(false)} style={{
+                background: 'none', border: 'none', color: '#D4AF37',
+                fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1
+              }}>✕</button>
+            </div>
+
+            <div style={{ padding: '0.5rem 0' }}>
+              {TABS.map(tab => (
+                <button key={tab.id} onClick={() => switchTab(tab.id)} style={{
+                  display: 'flex', alignItems: 'center', gap: '0.75rem',
+                  width: '100%', padding: '0.9rem 1.5rem',
+                  background: activeTab === tab.id ? 'rgba(212,175,55,0.12)' : 'transparent',
+                  border: 'none',
+                  borderLeft: `3px solid ${activeTab === tab.id ? '#D4AF37' : 'transparent'}`,
+                  color: activeTab === tab.id ? '#D4AF37' : '#8ba5b0',
+                  fontSize: '1rem', fontWeight: activeTab === tab.id ? 600 : 400,
+                  cursor: 'pointer', textAlign: 'left'
+                }}>
+                  <span style={{ fontSize: '1.25rem', width: '28px', textAlign: 'center' }}>{tab.icon}</span>
+                  <span>{tab.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div style={{
+              padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.06)'
+            }}>
+              <div style={{ color: '#64808b', fontSize: '0.8rem', marginBottom: '0.6rem' }}>{user.email}</div>
+              <button onClick={handleLogout} style={{
+                background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+                color: '#f87171', padding: '0.6rem 1rem', borderRadius: '8px',
+                cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500, width: '100%'
+              }}>🚪 Déconnexion</button>
+            </div>
+          </nav>
+        </>
+      )}
+
+      {/* ─── MAIN CONTENT ─── */}
       <main style={{
-        maxWidth: '1400px',
-        margin: '0 auto',
-        padding: window.innerWidth < 768 ? '1rem' : '2rem'
+        maxWidth: '1400px', margin: '0 auto',
+        padding: isMobile ? '1rem 0.75rem' : '2rem',
+        paddingBottom: isMobile ? '5rem' : '2rem'
       }}>
-        {activeTab === 'dashboard' && <Dashboard />}
+        {activeTab === 'dashboard' && <Dashboard onNavigate={switchTab} />}
         {activeTab === 'contacts' && <Contacts />}
         {activeTab === 'opportunites' && <Opportunites />}
         {activeTab === 'candidats' && <Candidats />}
         {activeTab === 'veille' && <Veille />}
         {activeTab === 'matching' && <Matching />}
-        {activeTab === 'parametres' && <VeilleConfig />}
+        {activeTab === 'config' && <VeilleConfig />}
       </main>
 
-      {/* Animation CSS */}
+      {/* ─── MOBILE BOTTOM TAB BAR ─── */}
+      {isMobile && !menuOpen && (
+        <nav style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0,
+          background: '#122a33', borderTop: '2px solid #D4AF37',
+          display: 'flex', justifyContent: 'space-around',
+          padding: '0.35rem 0 calc(0.35rem + env(safe-area-inset-bottom, 0px)) 0',
+          zIndex: 200, boxShadow: '0 -4px 16px rgba(0,0,0,0.2)'
+        }}>
+          {TABS.slice(0, 5).map(tab => (
+            <button key={tab.id} onClick={() => switchTab(tab.id)} style={{
+              background: 'none', border: 'none',
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.1rem',
+              padding: '0.25rem 0.4rem', cursor: 'pointer',
+              color: activeTab === tab.id ? '#D4AF37' : '#4a6370',
+              minWidth: '44px', minHeight: '44px', justifyContent: 'center'
+            }}>
+              <span style={{ fontSize: '1.15rem' }}>{tab.icon}</span>
+              <span style={{ fontSize: '0.58rem', fontWeight: activeTab === tab.id ? 600 : 400 }}>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+
       <style>{`
-        @keyframes slideDown {
-          from {
-            opacity: 0;
-            transform: translateY(-10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
+        @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+        @keyframes slideDown { from { transform: translateY(-100%) } to { transform: translateY(0) } }
       `}</style>
     </div>
   )

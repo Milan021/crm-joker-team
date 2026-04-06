@@ -1,13 +1,83 @@
 <!DOCTYPE html>
 <html lang="fr">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>CRM Pro - Milan Calic</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💼</text></svg>">
-</head>
-<body>
-  <div id="root"></div>
-  <script type="module" src="/src/main.jsx"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
+    <!-- PWA Meta Tags -->
+    <meta name="theme-color" content="#122a33" />
+    <meta name="background-color" content="#122a33" />
+    <meta name="description" content="CRM Joker Team — La carte pour réussir. Gestion contacts, opportunités, candidats, veille IT et matching IA." />
+    
+    <!-- Apple PWA -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Joker CRM" />
+    <link rel="apple-touch-icon" href="/logo-joker-team.png" />
+    
+    <!-- Android PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/logo-joker-team.png" />
+    
+    <title>CRM Joker Team</title>
+
+    <style>
+      /* Splash screen while app loads */
+      #splash {
+        position: fixed; inset: 0; z-index: 9999;
+        background: #122a33;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        transition: opacity 0.4s ease;
+      }
+      #splash img { height: 80px; margin-bottom: 1.5rem; }
+      #splash .loader {
+        width: 36px; height: 36px;
+        border: 3px solid rgba(212,175,55,0.2);
+        border-top-color: #D4AF37;
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg) } }
+      #splash.hidden { opacity: 0; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <!-- Splash screen -->
+    <div id="splash">
+      <img src="/logo-joker-team.png" alt="Joker Team" onerror="this.style.display='none'" />
+      <div class="loader"></div>
+    </div>
+
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+
+    <script>
+      // Hide splash when app is loaded
+      window.addEventListener('load', () => {
+        setTimeout(() => {
+          const splash = document.getElementById('splash')
+          if (splash) {
+            splash.classList.add('hidden')
+            setTimeout(() => splash.remove(), 500)
+          }
+        }, 600)
+      })
+
+      // Register Service Worker for PWA
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then((reg) => {
+              console.log('✅ Service Worker registered:', reg.scope)
+            })
+            .catch((err) => {
+              console.log('Service Worker registration failed:', err)
+            })
+        })
+      }
+    </script>
+  </body>
 </html>

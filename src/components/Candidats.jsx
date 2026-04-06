@@ -1,1244 +1,670 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
-import CVTemplate from './CVTemplate'
+
+const STATUS_CONFIG = {
+  disponible: { label: 'Disponible', color: '#34d399', bg: 'rgba(52,211,153,0.15)' },
+  en_mission: { label: 'En mission', color: '#60a5fa', bg: 'rgba(96,165,250,0.15)' },
+  indisponible: { label: 'Indisponible', color: '#f87171', bg: 'rgba(248,113,113,0.15)' }
+}
+
+function getAnciennete(createdAt) {
+  if (!createdAt) return { label: 'Inconnu', badge: '—', color: '#64808b', bg: 'rgba(100,128,139,0.15)', days: 999 }
+  const days = Math.floor((new Date() - new Date(createdAt)) / (1000 * 60 * 60 * 24))
+  if (days <= 7) return { label: `${days}j`, badge: 'Nouveau', color: '#34d399', bg: 'rgba(52,211,153,0.15)', days }
+  if (days <= 30) return { label: `${days}j`, badge: 'Récent', color: '#60a5fa', bg: 'rgba(96,165,250,0.15)', days }
+  if (days <= 90) return { label: `${Math.floor(days / 30)}m`, badge: 'Ancien', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', days }
+  return { label: `${Math.floor(days / 30)}m`, badge: 'Ancien', color: '#64808b', bg: 'rgba(100,128,139,0.15)', days }
+}
 
 export default function Candidats() {
   const [candidats, setCandidats] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [showCV, setShowCV] = useState(false)
-  const [selectedCandidat, setSelectedCandidat] = useState(null)
   const [editingCandidat, setEditingCandidat] = useState(null)
+  const [filter, setFilter] = useState('all')
+  const [sortField, setSortField] = useState('created_at')
+  const [sortDir, setSortDir] = useState('desc')
   const [uploading, setUploading] = useState(false)
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    titre_poste: '',
-    experience_annees: 0,
-    competences: '',
-    technologies: '',
-    tjm: 0,
-    status: 'dispo',
-    diplomes: '',
-    synthese: '',
-    disponibilite_date: '',
-    experiences: [],
-    mots_cles: []
+    name: '', email: '', phone: '', titre_poste: '', tjm: 0,
+    status: 'disponible', competences: '', mots_cles: [],
+    mission_end_date: '', recontact_date: '', mission_client: '', mission_notes: ''
   })
-  const [filtreAnciennete, setFiltreAnciennete] = useState('tous')
-  const [triColonne, setTriColonne] = useState('created_at')
-  const [triOrdre, setTriOrdre] = useState('desc')
+  const [newTag, setNewTag] = useState('')
 
-  useEffect(() => {
-    loadCandidats()
-  }, [])
+  useEffect(() => { loadCandidats() }, [])
 
   async function loadCandidats() {
     try {
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      const { data, error } = await supabase
-        .from('candidats')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('name', { ascending: true })
-
+      const { data, error } = await supabase.from('candidats').select('*').order('created_at', { ascending: false })
       if (error) throw error
       setCandidats(data || [])
-    } catch (error) {
-      console.error('Erreur:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function handleFileUpload(e) {
-    const file = e.target.files[0]
-    if (!file) return
-
-    const validTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword']
-    if (!validTypes.includes(file.type)) {
-      alert('Format non supporté. Utilisez PDF ou DOCX.')
-      return
-    }
-
-    setUploading(true)
-
-    try {
-      console.log('📎 Début upload CV:', file.name)
-      
-      // 1. Upload dans Supabase Storage
-      const { data: { user } } = await supabase.auth.getUser()
-      
-      // Nettoyer le nom du fichier (enlever espaces, accents, caractères spéciaux)
-      const cleanFileName = file.name
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '') // Enlever les accents
-        .replace(/[^a-zA-Z0-9._-]/g, '_') // Remplacer caractères spéciaux par _
-      
-      const fileName = `${Date.now()}_${cleanFileName}`
-      const filePath = `${user.id}/${fileName}`
-
-      console.log('☁️ Upload vers Storage...', filePath)
-      
-      const { error: uploadError } = await supabase.storage
-        .from('cvs')
-        .upload(filePath, file)
-
-      if (uploadError) {
-        console.error('❌ Erreur upload Storage:', uploadError)
-        throw uploadError
-      }
-
-      console.log('✅ Upload Storage réussi')
-
-      // 2. Récupérer l'URL publique signée
-      const { data: urlData } = await supabase.storage
-        .from('cvs')
-        .createSignedUrl(filePath, 31536000) // 1 an
-
-      const cvUrl = urlData.signedUrl
-      console.log('🔗 URL générée:', cvUrl)
-
-      // 3. Convertir en base64 pour parsing
-      console.log('🔄 Conversion en base64...')
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result.split(',')[1])
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-
-      console.log('✅ Base64 généré')
-
-      // 4. Parser avec IA
-      console.log('🤖 Envoi à l\'API de parsing...')
-      const response = await fetch('https://crm-joker-team.vercel.app/api/parse-cv', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fileData: base64,
-          fileType: file.type
-        })
-      })
-
-      console.log('📡 Réponse API:', response.status)
-
-      if (!response.ok) {
-        const errorText = await response.text()
-        console.error('❌ Erreur API:', errorText)
-        throw new Error(`Erreur API: ${response.status}`)
-      }
-
-      const result = await response.json()
-      console.log('✅ Résultat parsing:', result)
-      
-      // L'API retourne {data: {...}}
-      const parsedData = result.data || result
-      
-      if (parsedData && parsedData.nom) {
-        console.log('📝 Données reçues:', parsedData)
-        
-        // 5. Extraire mots-clés
-        const motsCles = extractMotsCles(parsedData)
-        console.log('🏷️ Mots-clés extraits:', motsCles)
-
-        // 6. Pré-remplir le formulaire - MAPPING EXACT
-        const newFormData = {
-          ...formData,
-          name: parsedData.nom || '',
-          titre_poste: parsedData.titre || parsedData.titre_poste || '',  // API retourne "titre"
-          email: parsedData.email || '',
-          phone: parsedData.telephone || '',
-          experience_annees: parseInt(parsedData.experience_annees) || 0,
-          // Convertir array en string si nécessaire
-          competences: Array.isArray(parsedData.competences) 
-            ? parsedData.competences.join(', ') 
-            : (parsedData.competences || ''),
-          technologies: Array.isArray(parsedData.technologies)
-            ? parsedData.technologies.join(', ')
-            : (parsedData.technologies || ''),
-          tjm: parseInt(parsedData.tjm_suggere) || 0,
-          diplomes: Array.isArray(parsedData.diplomes)
-            ? parsedData.diplomes.join(', ')
-            : (parsedData.diplomes || ''),
-          synthese: parsedData.synthese || '',
-          status: 'dispo',
-          experiences: parsedData.experiences || [],
-          mots_cles: motsCles,
-          cv_url: cvUrl,
-          cv_filename: file.name,
-          cv_uploaded_at: new Date().toISOString()
-        }
-
-        console.log('✅ Formulaire pré-rempli:', newFormData)
-        setFormData(newFormData)
-        
-        alert('✅ CV analysé avec succès !\n\nCandidatt: ' + newFormData.name + '\nPoste: ' + newFormData.titre_poste + '\n\nVérifiez les données et cliquez Créer.')
-      } else {
-        console.error('❌ Données invalides ou vides:', result)
-        throw new Error('Aucune donnée extraite du CV')
-      }
-    } catch (error) {
-      console.error('❌ Erreur complète:', error)
-      alert(`❌ Erreur: ${error.message}\n\nVérifiez la console F12 pour plus de détails.`)
-    } finally {
-      setUploading(false)
-      console.log('🏁 Upload terminé')
-    }
-  }
-
-  function extractMotsCles(data) {
-    const mots = new Set()
-    
-    // Fonction helper pour ajouter des mots
-    const addMots = (value) => {
-      if (!value) return
-      
-      // Si c'est une chaîne
-      if (typeof value === 'string') {
-        value.split(',').forEach(item => {
-          const cleaned = item.trim()
-          if (cleaned && cleaned.length > 2) mots.add(cleaned)
-        })
-      }
-      // Si c'est un tableau
-      else if (Array.isArray(value)) {
-        value.forEach(item => {
-          if (typeof item === 'string') {
-            const cleaned = item.trim()
-            if (cleaned && cleaned.length > 2) mots.add(cleaned)
-          }
-        })
-      }
-    }
-    
-    // Compétences
-    addMots(data.competences)
-    
-    // Technologies
-    addMots(data.technologies)
-
-    // Diplômes (optionnel)
-    if (data.diplomes) {
-      addMots(data.diplomes)
-    }
-
-    return Array.from(mots).slice(0, 20) // Max 20 mots-clés
-  }
-
-  function addMotCle(motCle) {
-    const cleaned = motCle.trim()
-    if (cleaned && !formData.mots_cles.includes(cleaned)) {
-      setFormData({
-        ...formData,
-        mots_cles: [...formData.mots_cles, cleaned]
-      })
-    }
-  }
-
-  function removeMotCle(motCle) {
-    setFormData({
-      ...formData,
-      mots_cles: formData.mots_cles.filter(m => m !== motCle)
-    })
+    } catch (err) { console.error('Erreur:', err) }
+    finally { setLoading(false) }
   }
 
   async function handleSubmit(e) {
     e.preventDefault()
-    
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      
-      const dataToSave = {
+      const payload = {
         name: formData.name,
         email: formData.email || null,
         phone: formData.phone || null,
         titre_poste: formData.titre_poste || null,
-        experience_annees: parseInt(formData.experience_annees) || 0,
+        tjm: Number(formData.tjm) || null,
+        status: formData.status,
         competences: formData.competences || null,
-        technologies: formData.technologies || null,
-        tjm: parseInt(formData.tjm) || 0,
-        status: formData.status || 'dispo',
-        diplomes: formData.diplomes || null,
-        synthese: formData.synthese || null,
-        disponibilite_date: formData.disponibilite_date || null,
-        experiences: formData.experiences || [],
-        mots_cles: formData.mots_cles || [],
-        cv_url: formData.cv_url || null,
-        cv_filename: formData.cv_filename || null,
-        cv_uploaded_at: formData.cv_uploaded_at || null,
-        user_id: user.id
+        mots_cles: formData.mots_cles?.length ? formData.mots_cles : null,
+        mission_end_date: formData.mission_end_date || null,
+        recontact_date: formData.recontact_date || null,
+        mission_client: formData.mission_client || null,
+        mission_notes: formData.mission_notes || null,
+        user_id: user?.id
       }
-
       if (editingCandidat) {
-        const { error } = await supabase
-          .from('candidats')
-          .update(dataToSave)
-          .eq('id', editingCandidat.id)
-        
+        const { user_id, ...upd } = payload
+        const { error } = await supabase.from('candidats').update(upd).eq('id', editingCandidat.id)
         if (error) throw error
       } else {
-        const { error } = await supabase
-          .from('candidats')
-          .insert([dataToSave])
-        
+        const { error } = await supabase.from('candidats').insert([payload])
         if (error) throw error
       }
-
-      setShowModal(false)
-      setEditingCandidat(null)
-      resetForm()
-      loadCandidats()
-    } catch (error) {
-      console.error('Erreur:', error)
-      alert(`Erreur: ${error.message}`)
-    }
+      setShowModal(false); setEditingCandidat(null); resetForm(); loadCandidats()
+    } catch (err) { alert(`Erreur: ${err.message}`) }
   }
 
   async function handleDelete(id) {
-    if (!confirm('Supprimer ce candidat et son CV ?')) return
-    
+    if (!confirm('Supprimer ce candidat ?')) return
     try {
-      // Supprimer le CV du storage si existe
-      const candidat = candidats.find(c => c.id === id)
-      if (candidat?.cv_url) {
-        const { data: { user } } = await supabase.auth.getUser()
-        const filePath = `${user.id}/${candidat.cv_filename}`
-        await supabase.storage.from('cvs').remove([filePath])
-      }
-
-      const { error } = await supabase
-        .from('candidats')
-        .delete()
-        .eq('id', id)
-      
+      const { error } = await supabase.from('candidats').delete().eq('id', id)
       if (error) throw error
       loadCandidats()
-    } catch (error) {
-      console.error('Erreur:', error)
-    }
+    } catch (err) { alert(`Erreur: ${err.message}`) }
+  }
+
+  async function handleCVUpload(candidatId, file) {
+    if (!file) return
+    setUploading(true)
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
+      const path = `${user.id}/${Date.now()}_${safeName}`
+
+      // Upload to storage
+      const { error: uploadErr } = await supabase.storage.from('cvs').upload(path, file)
+      if (uploadErr) throw uploadErr
+
+      const { data: urlData } = supabase.storage.from('cvs').getPublicUrl(path)
+
+      // Update candidat
+      await supabase.from('candidats').update({
+        cv_url: urlData.publicUrl,
+        cv_filename: file.name,
+        cv_uploaded_at: new Date().toISOString()
+      }).eq('id', candidatId)
+
+      // Try parsing with API
+      try {
+        const reader = new FileReader()
+        const base64 = await new Promise((res, rej) => {
+          reader.onload = () => res(reader.result.split(',')[1])
+          reader.onerror = rej
+          reader.readAsDataURL(file)
+        })
+        const resp = await fetch('/api/parse-cv', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileData: base64, fileType: file.type })
+        })
+        if (resp.ok) {
+          const result = await resp.json()
+          if (result.data && result.data.nom) {
+            const parsed = result.data
+            const keywords = []
+            const comp = parsed.competences
+            if (Array.isArray(comp)) keywords.push(...comp)
+            else if (typeof comp === 'string') keywords.push(...comp.split(',').map(s => s.trim()).filter(Boolean))
+
+            await supabase.from('candidats').update({
+              titre_poste: parsed.titre || parsed.titre_poste || null,
+              competences: Array.isArray(comp) ? comp.join(', ') : (comp || null),
+              mots_cles: keywords.slice(0, 20),
+              experience_annees: parsed.experience_annees || null,
+              synthese: parsed.synthese || null
+            }).eq('id', candidatId)
+
+            alert(`✅ CV uploadé et analysé !\nCompétences: ${keywords.slice(0, 5).join(', ')}...`)
+          } else {
+            alert('✅ CV uploadé ! (parsing partiel)')
+          }
+        } else {
+          alert('✅ CV uploadé ! (parsing indisponible)')
+        }
+      } catch { alert('✅ CV uploadé !') }
+
+      loadCandidats()
+    } catch (err) { alert(`Erreur upload: ${err.message}`) }
+    finally { setUploading(false) }
   }
 
   function resetForm() {
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      titre_poste: '',
-      experience_annees: 0,
-      competences: '',
-      technologies: '',
-      tjm: 0,
-      status: 'dispo',
-      diplomes: '',
-      synthese: '',
-      disponibilite_date: '',
-      experiences: [],
-      mots_cles: []
-    })
+    setFormData({ name: '', email: '', phone: '', titre_poste: '', tjm: 0, status: 'disponible', competences: '', mots_cles: [], mission_end_date: '', recontact_date: '', mission_client: '', mission_notes: '' })
+    setNewTag('')
   }
 
-  function openEditModal(candidat) {
-    setEditingCandidat(candidat)
+  function openEdit(c) {
+    setEditingCandidat(c)
     setFormData({
-      name: candidat.name || '',
-      email: candidat.email || '',
-      phone: candidat.phone || '',
-      titre_poste: candidat.titre_poste || '',
-      experience_annees: candidat.experience_annees || 0,
-      competences: candidat.competences || '',
-      technologies: candidat.technologies || '',
-      tjm: candidat.tjm || 0,
-      status: candidat.status || 'dispo',
-      diplomes: candidat.diplomes || '',
-      synthese: candidat.synthese || '',
-      disponibilite_date: candidat.disponibilite_date || '',
-      experiences: candidat.experiences || [],
-      mots_cles: candidat.mots_cles || [],
-      cv_url: candidat.cv_url || null,
-      cv_filename: candidat.cv_filename || null,
-      cv_uploaded_at: candidat.cv_uploaded_at || null
+      name: c.name || '', email: c.email || '', phone: c.phone || '',
+      titre_poste: c.titre_poste || '', tjm: c.tjm || 0, status: c.status || 'disponible',
+      competences: c.competences || '', mots_cles: c.mots_cles || [],
+      mission_end_date: c.mission_end_date || '', recontact_date: c.recontact_date || '',
+      mission_client: c.mission_client || '', mission_notes: c.mission_notes || ''
     })
     setShowModal(true)
   }
 
-  function openNewCandidatModal() {
-    setEditingCandidat(null)
-    resetForm()
-    setShowModal(true)
-  }
+  function openNew() { setEditingCandidat(null); resetForm(); setShowModal(true) }
 
-  function openCVPreview(candidat) {
-    setSelectedCandidat(candidat)
-    setShowCV(true)
-  }
-
-  function getStatusColor(status) {
-    const colors = {
-      dispo: { bg: '#dcfce7', text: '#166534' },
-      mission: { bg: '#dbeafe', text: '#1e40af' },
-      indispo: { bg: '#fee2e2', text: '#991b1b' }
-    }
-    return colors[status] || colors.dispo
-  }
-
-  function getStatusLabel(status) {
-    const labels = {
-      dispo: 'Disponible',
-      mission: 'En mission',
-      indispo: 'Indisponible'
-    }
-    return labels[status] || status
-  }
-
-  function getAnciennete(createdAt) {
-    if (!createdAt) return { type: 'ancien', label: 'Date inconnue', jours: 999 }
-    
-    const now = new Date()
-    const created = new Date(createdAt)
-    const diffMs = now - created
-    const diffJours = Math.floor(diffMs / (1000 * 60 * 60 * 24))
-    
-    if (diffJours <= 7) {
-      return { type: 'nouveau', label: `Il y a ${diffJours} jour${diffJours > 1 ? 's' : ''}`, jours: diffJours }
-    } else if (diffJours <= 30) {
-      return { type: 'recent', label: `Il y a ${diffJours} jours`, jours: diffJours }
-    } else if (diffJours <= 365) {
-      const mois = Math.floor(diffJours / 30)
-      return { type: 'ancien', label: `Il y a ${mois} mois`, jours: diffJours }
-    } else {
-      const annees = Math.floor(diffJours / 365)
-      return { type: 'ancien', label: `Il y a ${annees} an${annees > 1 ? 's' : ''}`, jours: diffJours }
+  function addTag() {
+    if (newTag.trim() && !formData.mots_cles.includes(newTag.trim())) {
+      setFormData({ ...formData, mots_cles: [...formData.mots_cles, newTag.trim()] })
+      setNewTag('')
     }
   }
 
-  function getAncienneteBadge(type) {
-    const badges = {
-      nouveau: { bg: '#dcfce7', text: '#166534', icon: '🆕', label: 'Nouveau' },
-      recent: { bg: '#dbeafe', text: '#1e40af', icon: '📅', label: 'Récent' },
-      ancien: { bg: '#f1f5f9', text: '#475569', icon: '📦', label: 'Ancien' }
-    }
-    return badges[type] || badges.ancien
+  function removeTag(tag) {
+    setFormData({ ...formData, mots_cles: formData.mots_cles.filter(t => t !== tag) })
   }
 
-  function filtrerCandidats(candidats) {
-    if (filtreAnciennete === 'tous') return candidats
-    
-    return candidats.filter(c => {
-      const { type } = getAnciennete(c.created_at)
-      return type === filtreAnciennete
-    })
+  function toggleSort(field) {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortField(field); setSortDir('desc') }
   }
 
-  function trierCandidats(candidats) {
-    const sorted = [...candidats].sort((a, b) => {
-      let valA, valB
-      
-      if (triColonne === 'created_at') {
-        valA = new Date(a.created_at || 0)
-        valB = new Date(b.created_at || 0)
-      } else if (triColonne === 'name') {
-        valA = (a.name || '').toLowerCase()
-        valB = (b.name || '').toLowerCase()
-      } else if (triColonne === 'tjm') {
-        valA = a.tjm || 0
-        valB = b.tjm || 0
-      }
-      
-      if (triOrdre === 'asc') {
-        return valA > valB ? 1 : -1
-      } else {
-        return valA < valB ? 1 : -1
-      }
-    })
-    
-    return sorted
+  // Filtering & sorting
+  const now = new Date()
+  const withAge = candidats.map(c => ({ ...c, _age: Math.floor((now - new Date(c.created_at)) / 86400000) }))
+
+  const filtered = filter === 'all' ? withAge
+    : filter === 'nouveau' ? withAge.filter(c => c._age <= 7)
+    : filter === 'recent' ? withAge.filter(c => c._age > 7 && c._age <= 30)
+    : withAge.filter(c => c._age > 30)
+
+  const sorted = [...filtered].sort((a, b) => {
+    let va, vb
+    if (sortField === 'name') { va = a.name || ''; vb = b.name || '' }
+    else if (sortField === 'created_at') { va = a._age; vb = b._age }
+    else { va = a[sortField] || ''; vb = b[sortField] || '' }
+    const cmp = typeof va === 'string' ? va.localeCompare(vb) : va - vb
+    return sortDir === 'asc' ? cmp : -cmp
+  })
+
+  // Stats
+  const dispos = candidats.filter(c => c.status === 'disponible').length
+  const enMission = candidats.filter(c => c.status === 'en_mission').length
+  const nouveaux = withAge.filter(c => c._age <= 7).length
+  const tjmMoyen = candidats.length ? Math.round(candidats.reduce((s, c) => s + (c.tjm || 0), 0) / candidats.filter(c => c.tjm).length || 0) : 0
+
+  // Alerts: missions ending soon & recontact due
+  const today = new Date().toISOString().slice(0, 10)
+  const missionEndingSoon = candidats.filter(c => {
+    if (!c.mission_end_date) return false
+    const diff = Math.floor((new Date(c.mission_end_date) - new Date()) / 86400000)
+    return diff >= 0 && diff <= 14
+  })
+  const recontactDue = candidats.filter(c => {
+    if (!c.recontact_date) return false
+    return c.recontact_date <= today
+  })
+
+  const card = {
+    background: 'linear-gradient(135deg, rgba(18,42,51,0.95) 0%, rgba(26,58,69,0.9) 100%)',
+    borderRadius: '16px', border: '1px solid rgba(212,175,55,0.12)',
+    backdropFilter: 'blur(12px)', color: '#e2e8f0'
   }
 
-  function toggleTri(colonne) {
-    if (triColonne === colonne) {
-      setTriOrdre(triOrdre === 'asc' ? 'desc' : 'asc')
-    } else {
-      setTriColonne(colonne)
-      setTriOrdre('desc')
-    }
-  }
-
-  if (loading) {
-    return <div className="loading"><div className="loading-spinner"></div></div>
-  }
-
-  const candDispos = candidats.filter(c => c.status === 'dispo').length
-  const candMission = candidats.filter(c => c.status === 'mission').length
-  const candNouveaux = candidats.filter(c => getAnciennete(c.created_at).type === 'nouveau').length
-  const candRecents = candidats.filter(c => getAnciennete(c.created_at).type === 'recent').length
-  const candAnciens = candidats.filter(c => getAnciennete(c.created_at).type === 'ancien').length
-
-  const candidatsFiltres = trierCandidats(filtrerCandidats(candidats))
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
+      <div style={{ width: 40, height: 40, border: '3px solid rgba(212,175,55,0.2)', borderTopColor: '#D4AF37', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
 
   return (
-    <div style={{ padding: '2rem' }}>
-      {/* Stats */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
-        gap: '1.5rem',
-        marginBottom: '2rem'
-      }}>
-        <div style={{
-          background: '#fff',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-        }}>
-          <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>👔 Total Candidats</div>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1e293b' }}>{candidats.length}</div>
+    <div>
+      {/* ── ALERTS ── */}
+      {(missionEndingSoon.length > 0 || recontactDue.length > 0) && (
+        <div style={{ marginBottom: '1.5rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {missionEndingSoon.map(c => {
+            const diff = Math.floor((new Date(c.mission_end_date) - new Date()) / 86400000)
+            return (
+              <div key={`me-${c.id}`} style={{
+                ...card, padding: '1rem 1.5rem', borderLeft: `4px solid ${diff <= 3 ? '#f87171' : '#f59e0b'}`,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <span style={{ fontSize: '1.3rem' }}>{diff <= 3 ? '🚨' : '⏰'}</span>
+                  <div>
+                    <div style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.9rem' }}>
+                      {c.name} — Mission se termine {diff === 0 ? "aujourd'hui" : `dans ${diff} jour${diff > 1 ? 's' : ''}`}
+                    </div>
+                    <div style={{ fontSize: '0.78rem', color: '#64808b' }}>
+                      {c.mission_client ? `Client: ${c.mission_client} · ` : ''}Fin: {new Date(c.mission_end_date).toLocaleDateString('fr-FR')}
+                    </div>
+                  </div>
+                </div>
+                <button onClick={() => openEdit(c)} style={{
+                  background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)',
+                  color: '#D4AF37', padding: '0.4rem 1rem', borderRadius: '6px',
+                  cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600
+                }}>✏️ Gérer</button>
+              </div>
+            )
+          })}
+          {recontactDue.map(c => (
+            <div key={`rc-${c.id}`} style={{
+              ...card, padding: '1rem 1.5rem', borderLeft: '4px solid #a78bfa',
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{ fontSize: '1.3rem' }}>📞</span>
+                <div>
+                  <div style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.9rem' }}>
+                    {c.name} — Recontact prévu pour aujourd'hui
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: '#64808b' }}>
+                    {c.titre_poste || 'Poste non renseigné'} · Date: {new Date(c.recontact_date).toLocaleDateString('fr-FR')}
+                  </div>
+                </div>
+              </div>
+              <button onClick={() => openEdit(c)} style={{
+                background: 'rgba(167,139,250,0.15)', border: '1px solid rgba(167,139,250,0.3)',
+                color: '#a78bfa', padding: '0.4rem 1rem', borderRadius: '6px',
+                cursor: 'pointer', fontSize: '0.78rem', fontWeight: 600
+              }}>📞 Contacter</button>
+            </div>
+          ))}
         </div>
+      )}
 
-        <div style={{
-          background: '#fff',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-        }}>
-          <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>✅ Disponibles</div>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1e293b' }}>{candDispos}</div>
-        </div>
-
-        <div style={{
-          background: '#fff',
-          borderRadius: '12px',
-          padding: '1.5rem',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-        }}>
-          <div style={{ color: '#64748b', fontSize: '0.9rem', marginBottom: '0.5rem' }}>💼 En mission</div>
-          <div style={{ fontSize: '2rem', fontWeight: 700, color: '#1e293b' }}>{candMission}</div>
-        </div>
+      {/* ── STATS ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+        {[
+          { icon: '👔', label: 'Total Candidats', value: candidats.length, accent: '#D4AF37' },
+          { icon: '✅', label: 'Disponibles', value: dispos, accent: '#34d399' },
+          { icon: '🚀', label: 'En mission', value: enMission, accent: '#60a5fa' },
+          { icon: '🆕', label: 'Nouveaux (7j)', value: nouveaux, accent: '#a78bfa' },
+          { icon: '💰', label: 'TJM Moyen', value: tjmMoyen ? `${tjmMoyen} €` : '—', accent: '#f59e0b' }
+        ].map((s, i) => (
+          <div key={i} style={{ ...card, padding: '1.25rem 1.5rem', borderTop: `3px solid ${s.accent}` }}>
+            <div style={{ fontSize: '0.8rem', color: '#8ba5b0', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span>{s.icon}</span> {s.label}
+            </div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#fff' }}>{s.value}</div>
+          </div>
+        ))}
       </div>
 
-      {/* Liste */}
-      <div style={{
-        background: '#fff',
-        borderRadius: '12px',
-        padding: '2rem',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.05)'
-      }}>
-        <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: '2rem'
-        }}>
-          <h2 style={{
-            fontSize: '1.5rem',
-            fontWeight: 700,
-            color: '#1e293b',
-            margin: 0
-          }}>
-            👔 Candidats ({candidatsFiltres.length})
+      {/* ── HEADER + FILTERS ── */}
+      <div style={{ ...card, padding: '1.5rem 2rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            👔 Candidats <span style={{ fontSize: '0.9rem', color: '#8ba5b0', fontWeight: 400 }}>({sorted.length})</span>
           </h2>
-          <button
-            onClick={openNewCandidatModal}
-            style={{
-              background: 'linear-gradient(135deg, #2C4F5A 0%, #1a3540 100%)',
-              color: '#fff',
-              border: 'none',
-              padding: '0.75rem 1.5rem',
-              borderRadius: '8px',
-              fontSize: '1rem',
-              fontWeight: 600,
-              cursor: 'pointer'
-            }}
-          >
-            + Nouveau candidat
-          </button>
+          <button onClick={openNew} style={{
+            background: 'linear-gradient(135deg, #D4AF37, #c9a02e)', border: 'none', borderRadius: '8px',
+            color: '#122a33', padding: '0.6rem 1.4rem', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer'
+          }}>+ Nouveau candidat</button>
         </div>
 
-        {/* Filtres par ancienneté */}
-        <div style={{
-          display: 'flex',
-          gap: '0.75rem',
-          marginBottom: '1.5rem',
-          flexWrap: 'wrap'
-        }}>
-          <button
-            onClick={() => setFiltreAnciennete('tous')}
-            style={{
-              padding: '0.6rem 1.2rem',
-              borderRadius: '8px',
-              border: filtreAnciennete === 'tous' ? '2px solid #2C4F5A' : '1px solid #e2e8f0',
-              background: filtreAnciennete === 'tous' ? '#2C4F5A' : '#fff',
-              color: filtreAnciennete === 'tous' ? '#fff' : '#64748b',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            Tous ({candidats.length})
-          </button>
-          
-          <button
-            onClick={() => setFiltreAnciennete('nouveau')}
-            style={{
-              padding: '0.6rem 1.2rem',
-              borderRadius: '8px',
-              border: filtreAnciennete === 'nouveau' ? '2px solid #16a34a' : '1px solid #e2e8f0',
-              background: filtreAnciennete === 'nouveau' ? '#dcfce7' : '#fff',
-              color: filtreAnciennete === 'nouveau' ? '#166534' : '#64748b',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            🆕 Nouveaux ({candNouveaux})
-          </button>
-          
-          <button
-            onClick={() => setFiltreAnciennete('recent')}
-            style={{
-              padding: '0.6rem 1.2rem',
-              borderRadius: '8px',
-              border: filtreAnciennete === 'recent' ? '2px solid #2563eb' : '1px solid #e2e8f0',
-              background: filtreAnciennete === 'recent' ? '#dbeafe' : '#fff',
-              color: filtreAnciennete === 'recent' ? '#1e40af' : '#64748b',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            📅 Récents ({candRecents})
-          </button>
-          
-          <button
-            onClick={() => setFiltreAnciennete('ancien')}
-            style={{
-              padding: '0.6rem 1.2rem',
-              borderRadius: '8px',
-              border: filtreAnciennete === 'ancien' ? '2px solid #64748b' : '1px solid #e2e8f0',
-              background: filtreAnciennete === 'ancien' ? '#f1f5f9' : '#fff',
-              color: filtreAnciennete === 'ancien' ? '#475569' : '#64748b',
-              fontWeight: 600,
-              cursor: 'pointer',
-              fontSize: '0.9rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            📦 Anciens ({candAnciens})
-          </button>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {[
+            { id: 'all', label: `Tous (${candidats.length})` },
+            { id: 'nouveau', label: `🆕 Nouveaux (${nouveaux})` },
+            { id: 'recent', label: `📅 Récents (${withAge.filter(c => c._age > 7 && c._age <= 30).length})` },
+            { id: 'ancien', label: `📦 Anciens (${withAge.filter(c => c._age > 30).length})` }
+          ].map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)} style={{
+              background: filter === f.id ? 'rgba(212,175,55,0.2)' : 'rgba(255,255,255,0.05)',
+              border: filter === f.id ? '1px solid rgba(212,175,55,0.5)' : '1px solid rgba(255,255,255,0.08)',
+              color: filter === f.id ? '#D4AF37' : '#8ba5b0',
+              padding: '0.35rem 0.9rem', borderRadius: '20px', fontSize: '0.78rem',
+              fontWeight: filter === f.id ? 600 : 400, cursor: 'pointer', transition: 'all 0.2s'
+            }}>{f.label}</button>
+          ))}
         </div>
-
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead style={{ background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-            <tr>
-              <th 
-                onClick={() => toggleTri('name')}
-                style={{ 
-                  padding: '1rem', 
-                  textAlign: 'left', 
-                  fontWeight: 600, 
-                  color: '#475569',
-                  cursor: 'pointer',
-                  userSelect: 'none'
-                }}
-              >
-                Nom {triColonne === 'name' && (triOrdre === 'asc' ? '↑' : '↓')}
-              </th>
-              <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600, color: '#475569' }}>Poste</th>
-              <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600, color: '#475569' }}>Mots-clés</th>
-              <th 
-                onClick={() => toggleTri('created_at')}
-                style={{ 
-                  padding: '1rem', 
-                  textAlign: 'left', 
-                  fontWeight: 600, 
-                  color: '#475569',
-                  cursor: 'pointer',
-                  userSelect: 'none'
-                }}
-              >
-                Ancienneté {triColonne === 'created_at' && (triOrdre === 'asc' ? '↑' : '↓')}
-              </th>
-              <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600, color: '#475569' }}>CV</th>
-              <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600, color: '#475569' }}>Statut</th>
-              <th style={{ padding: '1rem', textAlign: 'left', fontWeight: 600, color: '#475569' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {candidatsFiltres.map((candidat, idx) => {
-              const anciennete = getAnciennete(candidat.created_at)
-              const badge = getAncienneteBadge(anciennete.type)
-              
-              return (
-                <tr
-                  key={candidat.id}
-                  style={{
-                    borderBottom: idx < candidatsFiltres.length - 1 ? '1px solid #f1f5f9' : 'none'
-                  }}
-                >
-                  <td style={{ padding: '1rem', fontWeight: 600, color: '#1e293b' }}>{candidat.name}</td>
-                  <td style={{ padding: '1rem', color: '#64748b' }}>{candidat.titre_poste || '—'}</td>
-                  <td style={{ padding: '1rem' }}>
-                    {candidat.mots_cles && candidat.mots_cles.length > 0 ? (
-                      <div style={{ display: 'flex', gap: '0.25rem', flexWrap: 'wrap' }}>
-                        {candidat.mots_cles.slice(0, 3).map((mot, i) => (
-                          <span key={i} style={{
-                            background: '#dbeafe',
-                            color: '#1e40af',
-                            padding: '0.2rem 0.5rem',
-                            borderRadius: '6px',
-                            fontSize: '0.75rem',
-                            fontWeight: 600
-                          }}>
-                            {mot}
-                          </span>
-                        ))}
-                        {candidat.mots_cles.length > 3 && (
-                          <span style={{ color: '#64748b', fontSize: '0.75rem' }}>
-                            +{candidat.mots_cles.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    ) : '—'}
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                      <span style={{
-                        background: badge.bg,
-                        color: badge.text,
-                        padding: '0.3rem 0.7rem',
-                        borderRadius: '8px',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.3rem'
-                      }}>
-                        {badge.icon} {badge.label}
-                      </span>
-                      <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                        {anciennete.label}
-                      </span>
-                    </div>
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    {candidat.cv_url ? (
-                      <a 
-                        href={candidat.cv_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={{
-                          color: '#2C4F5A',
-                          textDecoration: 'none',
-                          fontWeight: 600,
-                          fontSize: '1.2rem'
-                        }}
-                        title="Télécharger le CV"
-                      >
-                        📎
-                      </a>
-                    ) : '—'}
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <span style={{
-                      background: getStatusColor(candidat.status).bg,
-                      color: getStatusColor(candidat.status).text,
-                      padding: '0.25rem 0.75rem',
-                      borderRadius: '12px',
-                      fontSize: '0.85rem',
-                      fontWeight: 600
-                    }}>
-                      {getStatusLabel(candidat.status)}
-                    </span>
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button
-                        onClick={() => openCVPreview(candidat)}
-                        style={{
-                          background: '#fef3c7',
-                          color: '#854d0e',
-                          border: 'none',
-                          padding: '0.5rem 0.75rem',
-                          borderRadius: '6px',
-                          cursor: 'pointer'
-                        }}
-                        title="Voir CV Joker Team"
-                      >
-                        📄
-                      </button>
-                      <button
-                        onClick={() => openEditModal(candidat)}
-                        style={{
-                          background: '#e0f2fe',
-                          color: '#0369a1',
-                          border: 'none',
-                          padding: '0.5rem 0.75rem',
-                          borderRadius: '6px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => handleDelete(candidat.id)}
-                        style={{
-                          background: '#fee2e2',
-                          color: '#991b1b',
-                          border: 'none',
-                          padding: '0.5rem 0.75rem',
-                          borderRadius: '6px',
-                          cursor: 'pointer'
-                        }}
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
       </div>
 
-      {/* Modal */}
+      {/* ── TABLE ── */}
+      <div style={{ ...card, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                <th onClick={() => toggleSort('name')} style={{ ...thStyle, cursor: 'pointer' }}>
+                  Nom {sortField === 'name' && (sortDir === 'asc' ? '↑' : '↓')}
+                </th>
+                <th style={thStyle}>Poste</th>
+                <th style={thStyle}>Mots-clés</th>
+                <th onClick={() => toggleSort('created_at')} style={{ ...thStyle, cursor: 'pointer' }}>
+                  Ancienneté {sortField === 'created_at' && (sortDir === 'asc' ? '↑' : '↓')}
+                </th>
+                <th style={thStyle}>CV</th>
+                <th style={thStyle}>TJM</th>
+                <th style={thStyle}>Statut</th>
+                <th style={thStyle}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.length === 0 ? (
+                <tr><td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#64808b' }}>
+                  Aucun candidat trouvé
+                </td></tr>
+              ) : sorted.map(c => {
+                const st = STATUS_CONFIG[c.status] || STATUS_CONFIG.disponible
+                const anc = getAnciennete(c.created_at)
+                const tags = c.mots_cles || []
+                return (
+                  <tr key={c.id} style={{ borderBottom: '1px solid rgba(255,255,255,0.04)', transition: 'background 0.15s' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(212,175,55,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                    <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: '#f1f5f9', fontSize: '0.9rem' }}>
+                      {c.name || '—'}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem', color: '#94a3b8', fontSize: '0.85rem', maxWidth: '200px' }}>
+                      {c.titre_poste || '—'}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      {tags.length > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                          {tags.slice(0, 3).map((t, i) => (
+                            <span key={i} style={{
+                              padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.7rem',
+                              fontWeight: 600, background: 'rgba(212,175,55,0.12)', color: '#D4AF37',
+                              border: '1px solid rgba(212,175,55,0.2)'
+                            }}>{t}</span>
+                          ))}
+                          {tags.length > 3 && (
+                            <span style={{ fontSize: '0.7rem', color: '#64808b', padding: '0.15rem 0.3rem' }}>
+                              +{tags.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      ) : <span style={{ color: '#4a6370', fontSize: '0.8rem' }}>—</span>}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{
+                          padding: '0.2rem 0.6rem', borderRadius: '12px', fontSize: '0.7rem',
+                          fontWeight: 600, color: anc.color, background: anc.bg
+                        }}>{anc.badge}</span>
+                        <span style={{ color: '#64808b', fontSize: '0.75rem' }}>{anc.label}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      {c.cv_url ? (
+                        <a href={c.cv_url} target="_blank" rel="noopener noreferrer"
+                          style={{ color: '#60a5fa', fontSize: '1.1rem', textDecoration: 'none' }}
+                          title={c.cv_filename || 'Télécharger CV'}>📎</a>
+                      ) : (
+                        <label style={{ cursor: uploading ? 'wait' : 'pointer', color: '#4a6370', fontSize: '1.1rem' }} title="Uploader un CV">
+                          📄
+                          <input type="file" accept=".pdf,.doc,.docx" style={{ display: 'none' }}
+                            onChange={e => handleCVUpload(c.id, e.target.files[0])} disabled={uploading} />
+                        </label>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem', color: '#D4AF37', fontWeight: 600, fontSize: '0.9rem' }}>
+                      {c.tjm ? `${c.tjm} €` : '—'}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <span style={{
+                        padding: '0.25rem 0.75rem', borderRadius: '20px', fontSize: '0.75rem',
+                        fontWeight: 600, color: st.color, background: st.bg
+                      }}>{st.label}</span>
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        {/* Upload CV button */}
+                        <label style={{
+                          background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)',
+                          color: '#a78bfa', width: '32px', height: '32px', borderRadius: '6px',
+                          cursor: uploading ? 'wait' : 'pointer', fontSize: '0.85rem', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center'
+                        }} title="Charger CV">
+                          📎
+                          <input type="file" accept=".pdf,.doc,.docx" style={{ display: 'none' }}
+                            onChange={e => handleCVUpload(c.id, e.target.files[0])} disabled={uploading} />
+                        </label>
+                        <button onClick={() => openEdit(c)} style={{
+                          background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)',
+                          color: '#60a5fa', width: '32px', height: '32px', borderRadius: '6px',
+                          cursor: 'pointer', fontSize: '0.85rem', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center'
+                        }}>✏️</button>
+                        <button onClick={() => handleDelete(c.id)} style={{
+                          background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)',
+                          color: '#f87171', width: '32px', height: '32px', borderRadius: '6px',
+                          cursor: 'pointer', fontSize: '0.85rem', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center'
+                        }}>🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── MODAL ── */}
       {showModal && (
         <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 1000,
-          backdropFilter: 'blur(4px)',
-          overflow: 'auto',
-          padding: '2rem'
-        }}>
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)'
+        }} onClick={() => setShowModal(false)}>
           <div style={{
-            background: '#fff',
-            borderRadius: '16px',
-            padding: '2rem',
-            width: '90%',
-            maxWidth: '800px',
-            maxHeight: '90vh',
-            overflow: 'auto',
-            boxShadow: '0 20px 60px rgba(0,0,0,0.3)'
-          }}>
-            <div style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '2rem',
-              paddingBottom: '1rem',
-              borderBottom: '2px solid #e2e8f0'
-            }}>
-              <h3 style={{
-                fontSize: '1.5rem',
-                fontWeight: 700,
-                color: '#1e293b',
-                margin: 0
-              }}>
-                {editingCandidat ? 'Modifier le candidat' : 'Nouveau candidat'}
+            ...card, width: '100%', maxWidth: '560px', maxHeight: '90vh',
+            overflowY: 'auto', padding: '2rem', boxShadow: '0 24px 64px rgba(0,0,0,0.4)'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+                {editingCandidat ? '✏️ Modifier le candidat' : '➕ Nouveau candidat'}
               </h3>
-              <button
-                onClick={() => setShowModal(false)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  fontSize: '2rem',
-                  cursor: 'pointer',
-                  color: '#94a3b8',
-                  padding: 0
-                }}
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Upload CV */}
-            <div style={{
-              background: '#f0fdf4',
-              border: '2px dashed #86efac',
-              borderRadius: '12px',
-              padding: '1.5rem',
-              marginBottom: '2rem',
-              textAlign: 'center'
-            }}>
-              <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>📎</div>
-              <div style={{ fontWeight: 600, color: '#166534', marginBottom: '0.5rem' }}>
-                Charger un CV pour extraction automatique
-              </div>
-              <div style={{ fontSize: '0.85rem', color: '#15803d', marginBottom: '1rem' }}>
-                PDF ou DOCX • L'IA analysera le CV et extraira les mots-clés
-              </div>
-              <input
-                type="file"
-                accept=".pdf,.docx,.doc"
-                onChange={handleFileUpload}
-                disabled={uploading}
-                style={{ display: 'none' }}
-                id="cv-upload"
-              />
-              <label
-                htmlFor="cv-upload"
-                style={{
-                  background: '#10b981',
-                  color: '#fff',
-                  padding: '0.75rem 1.5rem',
-                  borderRadius: '8px',
-                  cursor: uploading ? 'wait' : 'pointer',
-                  fontWeight: 600,
-                  display: 'inline-block',
-                  opacity: uploading ? 0.7 : 1
-                }}
-              >
-                {uploading ? '⏳ Analyse en cours...' : '📎 Charger un CV'}
-              </label>
-              
-              {formData.cv_filename && (
-                <div style={{
-                  marginTop: '1rem',
-                  padding: '0.75rem',
-                  background: '#fff',
-                  borderRadius: '8px',
-                  fontSize: '0.9rem',
-                  color: '#166534',
-                  fontWeight: 600
-                }}>
-                  ✅ CV chargé : {formData.cv_filename}
-                </div>
-              )}
+              <button onClick={() => setShowModal(false)} style={{
+                background: 'none', border: 'none', color: '#64808b', fontSize: '1.4rem', cursor: 'pointer'
+              }}>×</button>
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div style={{ display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(2, 1fr)' }}>
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Nom complet *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={e => setFormData({...formData, name: e.target.value})}
-                    required
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
-                </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Nom complet *</label>
+                <input type="text" required value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  style={inputStyle} />
+              </div>
 
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={formData.email}
-                    onChange={e => setFormData({...formData, email: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
+                  <label style={labelStyle}>Email</label>
+                  <input type="email" value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    style={inputStyle} />
                 </div>
-
                 <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Téléphone
-                  </label>
-                  <input
-                    type="tel"
-                    value={formData.phone}
-                    onChange={e => setFormData({...formData, phone: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Titre du poste
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.titre_poste}
-                    onChange={e => setFormData({...formData, titre_poste: e.target.value})}
-                    placeholder="Ex: Consultant Mainframe Senior"
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
-                </div>
-
-                {/* Mots-clés */}
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Mots-clés
-                  </label>
-                  <div style={{
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    padding: '0.75rem',
-                    minHeight: '80px',
-                    background: '#f8fafc'
-                  }}>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.75rem' }}>
-                      {formData.mots_cles.map((mot, idx) => (
-                        <span
-                          key={idx}
-                          style={{
-                            background: '#2C4F5A',
-                            color: '#fff',
-                            padding: '0.4rem 0.75rem',
-                            borderRadius: '8px',
-                            fontSize: '0.85rem',
-                            fontWeight: 600,
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '0.5rem'
-                          }}
-                        >
-                          {mot}
-                          <button
-                            type="button"
-                            onClick={() => removeMotCle(mot)}
-                            style={{
-                              background: 'none',
-                              border: 'none',
-                              color: '#D4AF37',
-                              cursor: 'pointer',
-                              fontSize: '1rem',
-                              padding: 0,
-                              lineHeight: 1
-                            }}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
-                    </div>
-                    <input
-                      type="text"
-                      placeholder="Ajouter un mot-clé et appuyez sur Entrée"
-                      onKeyPress={e => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          addMotCle(e.target.value)
-                          e.target.value = ''
-                        }
-                      }}
-                      style={{
-                        width: '100%',
-                        padding: '0.5rem',
-                        border: '1px solid #e2e8f0',
-                        borderRadius: '6px',
-                        fontSize: '0.9rem'
-                      }}
-                    />
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.5rem' }}>
-                    Appuyez sur Entrée pour ajouter • Cliquez sur × pour supprimer
-                  </div>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Expérience (années)
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.experience_annees}
-                    onChange={e => setFormData({...formData, experience_annees: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    TJM (€)
-                  </label>
-                  <input
-                    type="number"
-                    value={formData.tjm}
-                    onChange={e => setFormData({...formData, tjm: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Compétences (séparées par des virgules)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.competences}
-                    onChange={e => setFormData({...formData, competences: e.target.value})}
-                    placeholder="Ex: COBOL, Mainframe, DB2, CICS"
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Technologies (séparées par des virgules)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.technologies}
-                    onChange={e => setFormData({...formData, technologies: e.target.value})}
-                    placeholder="Ex: Java, Python, AWS"
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Statut
-                  </label>
-                  <select
-                    value={formData.status}
-                    onChange={e => setFormData({...formData, status: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  >
-                    <option value="dispo">Disponible</option>
-                    <option value="mission">En mission</option>
-                    <option value="indispo">Indisponible</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Disponibilité
-                  </label>
-                  <input
-                    type="date"
-                    value={formData.disponibilite_date}
-                    onChange={e => setFormData({...formData, disponibilite_date: e.target.value})}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px'
-                    }}
-                  />
-                </div>
-
-                <div style={{ gridColumn: '1 / -1' }}>
-                  <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 600, color: '#475569' }}>
-                    Synthèse du profil
-                  </label>
-                  <textarea
-                    value={formData.synthese}
-                    onChange={e => setFormData({...formData, synthese: e.target.value})}
-                    rows={3}
-                    style={{
-                      width: '100%',
-                      padding: '0.75rem',
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      resize: 'vertical'
-                    }}
-                  />
+                  <label style={labelStyle}>Téléphone</label>
+                  <input type="tel" value={formData.phone}
+                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                    style={inputStyle} />
                 </div>
               </div>
 
-              <div style={{
-                display: 'flex',
-                gap: '1rem',
-                marginTop: '2rem',
-                paddingTop: '1.5rem',
-                borderTop: '1px solid #e2e8f0'
-              }}>
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  style={{
-                    flex: 1,
-                    padding: '0.75rem',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: '8px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: '#fff',
-                    color: '#64748b'
-                  }}
-                >
-                  Annuler
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    flex: 1,
-                    padding: '0.75rem',
-                    border: 'none',
-                    borderRadius: '8px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    background: 'linear-gradient(135deg, #2C4F5A 0%, #1a3540 100%)',
-                    color: '#fff'
-                  }}
-                >
-                  {editingCandidat ? 'Mettre à jour' : 'Créer'}
-                </button>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Poste / Fonction</label>
+                <input type="text" value={formData.titre_poste}
+                  onChange={e => setFormData({ ...formData, titre_poste: e.target.value })}
+                  style={inputStyle} placeholder="Ex: Consultant Mainframe Senior" />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>TJM (€)</label>
+                  <input type="number" min="0" value={formData.tjm}
+                    onChange={e => setFormData({ ...formData, tjm: Number(e.target.value) })}
+                    style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Statut</label>
+                  <select value={formData.status}
+                    onChange={e => setFormData({ ...formData, status: e.target.value })}
+                    style={inputStyle}>
+                    <option value="disponible">Disponible</option>
+                    <option value="en_mission">En mission</option>
+                    <option value="indisponible">Indisponible</option>
+                  </select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Compétences</label>
+                <textarea rows={2} value={formData.competences}
+                  onChange={e => setFormData({ ...formData, competences: e.target.value })}
+                  style={{ ...inputStyle, resize: 'vertical' }}
+                  placeholder="COBOL, Mainframe, DB2, Java..." />
+              </div>
+
+              {/* Tags / Mots-clés */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={labelStyle}>Mots-clés</label>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  <input type="text" value={newTag}
+                    onChange={e => setNewTag(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addTag() } }}
+                    style={{ ...inputStyle, flex: 1 }}
+                    placeholder="Ajouter un mot-clé + Entrée" />
+                  <button type="button" onClick={addTag} style={{
+                    background: 'rgba(212,175,55,0.15)', border: '1px solid rgba(212,175,55,0.3)',
+                    color: '#D4AF37', padding: '0 1rem', borderRadius: '8px', cursor: 'pointer',
+                    fontWeight: 600, fontSize: '0.85rem'
+                  }}>+</button>
+                </div>
+                {formData.mots_cles.length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                    {formData.mots_cles.map((tag, i) => (
+                      <span key={i} style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.3rem',
+                        padding: '0.2rem 0.6rem', borderRadius: '6px', fontSize: '0.78rem',
+                        background: 'rgba(212,175,55,0.12)', color: '#D4AF37',
+                        border: '1px solid rgba(212,175,55,0.2)'
+                      }}>
+                        {tag}
+                        <button type="button" onClick={() => removeTag(tag)} style={{
+                          background: 'none', border: 'none', color: '#D4AF37',
+                          cursor: 'pointer', fontSize: '0.9rem', padding: 0, lineHeight: 1
+                        }}>×</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Mission fields - shown when status is en_mission */}
+              {formData.status === 'en_mission' && (
+                <div style={{
+                  background: 'rgba(96,165,250,0.05)', borderRadius: '10px', padding: '1.25rem',
+                  marginBottom: '1.5rem', border: '1px solid rgba(96,165,250,0.15)'
+                }}>
+                  <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#60a5fa', marginBottom: '0.75rem' }}>
+                    🚀 Détails de la mission
+                  </div>
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <label style={labelStyle}>Client de la mission</label>
+                    <input type="text" value={formData.mission_client}
+                      onChange={e => setFormData({ ...formData, mission_client: e.target.value })}
+                      style={inputStyle} placeholder="Ex: BNP Paribas, Société Générale..." />
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '0.75rem' }}>
+                    <div>
+                      <label style={labelStyle}>📅 Fin de mission</label>
+                      <input type="date" value={formData.mission_end_date}
+                        onChange={e => setFormData({ ...formData, mission_end_date: e.target.value })}
+                        style={inputStyle} />
+                    </div>
+                    <div>
+                      <label style={labelStyle}>📞 Date de recontact</label>
+                      <input type="date" value={formData.recontact_date}
+                        onChange={e => setFormData({ ...formData, recontact_date: e.target.value })}
+                        style={inputStyle} />
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Notes mission</label>
+                    <textarea rows={2} value={formData.mission_notes}
+                      onChange={e => setFormData({ ...formData, mission_notes: e.target.value })}
+                      style={{ ...inputStyle, resize: 'vertical' }}
+                      placeholder="Infos sur la mission en cours..." />
+                  </div>
+                </div>
+              )}
+
+              {/* Recontact date - shown when disponible too */}
+              {formData.status !== 'en_mission' && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <label style={labelStyle}>📞 Date de recontact (rappel)</label>
+                  <input type="date" value={formData.recontact_date}
+                    onChange={e => setFormData({ ...formData, recontact_date: e.target.value })}
+                    style={inputStyle} />
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowModal(false)} style={{
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#8ba5b0', padding: '0.6rem 1.4rem', borderRadius: '8px', fontSize: '0.9rem', cursor: 'pointer'
+                }}>Annuler</button>
+                <button type="submit" style={{
+                  background: 'linear-gradient(135deg, #D4AF37, #c9a02e)', border: 'none',
+                  color: '#122a33', padding: '0.6rem 1.8rem', borderRadius: '8px',
+                  fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer'
+                }}>{editingCandidat ? 'Mettre à jour' : 'Créer'}</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Modal CV Template */}
-      {showCV && selectedCandidat && (
-        <CVTemplate
-          candidat={selectedCandidat}
-          onClose={() => setShowCV(false)}
-        />
+      {uploading && (
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          justifyContent: 'center', zIndex: 2000, color: '#D4AF37'
+        }}>
+          <div style={{ width: 50, height: 50, border: '3px solid rgba(212,175,55,0.2)', borderTopColor: '#D4AF37', borderRadius: '50%', animation: 'spin 0.8s linear infinite', marginBottom: '1rem' }} />
+          <div style={{ fontSize: '1rem', fontWeight: 600 }}>Upload et analyse du CV en cours...</div>
+          <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+        </div>
       )}
     </div>
   )
+}
+
+const thStyle = {
+  padding: '0.9rem 1rem', textAlign: 'left', fontSize: '0.72rem',
+  fontWeight: 600, color: '#64808b', textTransform: 'uppercase', letterSpacing: '0.06em'
+}
+
+const labelStyle = {
+  display: 'block', color: '#8ba5b0', fontSize: '0.78rem',
+  fontWeight: 500, marginBottom: '0.3rem', letterSpacing: '0.03em', textTransform: 'uppercase'
+}
+
+const inputStyle = {
+  width: '100%', padding: '0.65rem 0.9rem',
+  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: '8px', color: '#e2e8f0', fontSize: '0.9rem',
+  outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.2s'
 }

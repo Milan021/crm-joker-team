@@ -1,40 +1,47 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
+const STATUS_CONFIG = {
+  prospection: { label: 'Prospection', color: '#94a3b8', bg: 'rgba(148,163,184,0.15)' },
+  qualification: { label: 'Qualification', color: '#60a5fa', bg: 'rgba(96,165,250,0.15)' },
+  proposition: { label: 'Proposition', color: '#D4AF37', bg: 'rgba(212,175,55,0.15)' },
+  negociation: { label: 'Négociation', color: '#f59e0b', bg: 'rgba(245,158,11,0.15)' },
+  gagne: { label: 'Gagné', color: '#34d399', bg: 'rgba(52,211,153,0.15)' },
+  perdu: { label: 'Perdu', color: '#f87171', bg: 'rgba(248,113,113,0.15)' }
+}
+
+const TYPE_CONFIG = {
+  AT: { label: 'AT', color: '#60a5fa' },
+  FORFAIT: { label: 'Forfait', color: '#a78bfa' },
+  REGIE: { label: 'Régie', color: '#34d399' },
+  CONSEIL: { label: 'Conseil', color: '#fbbf24' }
+}
+
 export default function Opportunites() {
   const [opportunites, setOpportunites] = useState([])
   const [contacts, setContacts] = useState([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingOpp, setEditingOpp] = useState(null)
+  const [filter, setFilter] = useState('all')
   const [formData, setFormData] = useState({
-    name: '',
-    contact_id: '',
-    type: 'at',
-    status: 'prospection',
-    probabilite: 50,
-    tjm: '',
-    nb_jours: '',
-    montant: '',
-    closing_date: '',
-    notes: ''
+    name: '', contact_id: '', type: 'AT', status: 'prospection',
+    probabilite: 10, tjm: 0, nb_jours: 0, montant: 0,
+    closing_date: '', notes: ''
   })
 
-  useEffect(() => {
-    loadData()
-  }, [])
+  useEffect(() => { loadData() }, [])
 
   async function loadData() {
     try {
-      const [{ data: opps }, { data: conts }] = await Promise.all([
-        supabase.from('opportunites').select('*, contacts(name, company)').order('created_at', { ascending: false }),
-        supabase.from('contacts').select('id, name, company')
+      const [oppResult, contactResult] = await Promise.all([
+        supabase.from('opportunites').select('*').order('created_at', { ascending: false }),
+        supabase.from('contacts').select('id, name')
       ])
-
-      setOpportunites(opps || [])
-      setContacts(conts || [])
-    } catch (error) {
-      console.error('Erreur:', error)
+      if (oppResult.data) setOpportunites(oppResult.data)
+      if (contactResult.data) setContacts(contactResult.data)
+    } catch (err) {
+      console.error('Erreur chargement:', err)
     } finally {
       setLoading(false)
     }
@@ -42,354 +49,376 @@ export default function Opportunites() {
 
   async function handleSubmit(e) {
     e.preventDefault()
-    
     try {
-      const dataToSave = {
+      const { data: { user } } = await supabase.auth.getUser()
+      const payload = {
         ...formData,
-        probabilite: parseInt(formData.probabilite) || 50,
-        tjm: parseFloat(formData.tjm) || null,
-        nb_jours: parseInt(formData.nb_jours) || null,
-        montant: parseFloat(formData.montant) || 0,
-        contact_id: formData.contact_id || null
+        montant: Number(formData.tjm) * Number(formData.nb_jours) || Number(formData.montant),
+        user_id: user?.id
       }
 
       if (editingOpp) {
-        const { error } = await supabase
-          .from('opportunites')
-          .update(dataToSave)
-          .eq('id', editingOpp.id)
-        
+        const { user_id, ...updateData } = payload
+        const { error } = await supabase.from('opportunites').update(updateData).eq('id', editingOpp.id)
         if (error) throw error
       } else {
-        const { error } = await supabase
-          .from('opportunites')
-          .insert([dataToSave])
-        
+        const { error } = await supabase.from('opportunites').insert([payload])
         if (error) throw error
       }
-
       setShowModal(false)
       setEditingOpp(null)
       resetForm()
       loadData()
-    } catch (error) {
-      console.error('Erreur:', error)
-      alert('Erreur lors de la sauvegarde')
+    } catch (err) {
+      console.error('Erreur sauvegarde:', err)
+      alert(`Erreur: ${err.message}`)
     }
   }
 
   async function handleDelete(id) {
     if (!confirm('Supprimer cette opportunité ?')) return
-    
     try {
-      const { error } = await supabase
-        .from('opportunites')
-        .delete()
-        .eq('id', id)
-      
+      const { error } = await supabase.from('opportunites').delete().eq('id', id)
       if (error) throw error
       loadData()
-    } catch (error) {
-      console.error('Erreur:', error)
-      alert('Erreur lors de la suppression')
-    }
+    } catch (err) { alert(`Erreur: ${err.message}`) }
   }
 
   function resetForm() {
-    setFormData({
-      name: '',
-      contact_id: '',
-      type: 'at',
-      status: 'prospection',
-      probabilite: 50,
-      tjm: '',
-      nb_jours: '',
-      montant: '',
-      closing_date: '',
-      notes: ''
-    })
+    setFormData({ name: '', contact_id: '', type: 'AT', status: 'prospection', probabilite: 10, tjm: 0, nb_jours: 0, montant: 0, closing_date: '', notes: '' })
   }
 
-  function openEditModal(opp) {
+  function openEdit(opp) {
     setEditingOpp(opp)
     setFormData({
-      name: opp.name || '',
-      contact_id: opp.contact_id || '',
-      type: opp.type || 'at',
-      status: opp.status || 'prospection',
-      probabilite: opp.probabilite || 50,
-      tjm: opp.tjm || '',
-      nb_jours: opp.nb_jours || '',
-      montant: opp.montant || '',
-      closing_date: opp.closing_date || '',
-      notes: opp.notes || ''
+      name: opp.name || '', contact_id: opp.contact_id || '', type: opp.type || 'AT',
+      status: opp.status || 'prospection', probabilite: opp.probabilite || 10,
+      tjm: opp.tjm || 0, nb_jours: opp.nb_jours || 0, montant: opp.montant || 0,
+      closing_date: opp.closing_date || '', notes: opp.notes || ''
     })
     setShowModal(true)
   }
 
-  function openNewModal() {
-    setEditingOpp(null)
-    resetForm()
-    setShowModal(true)
+  function openNew() { setEditingOpp(null); resetForm(); setShowModal(true) }
+
+  function getContactName(id) {
+    const c = contacts.find(c => c.id === id)
+    return c ? c.name : '—'
   }
 
-  function getStatusBadge(status) {
-    const badges = {
-      prospection: 'badge-info',
-      qualification: 'badge-warning',
-      proposition: 'badge-warning',
-      negociation: 'badge-warning',
-      gagne: 'badge-success',
-      perdu: 'badge-danger'
-    }
-    return badges[status] || 'badge-info'
+  function fmt(n) {
+    return new Intl.NumberFormat('fr-FR').format(n || 0)
   }
 
-  function getStatusLabel(status) {
-    const labels = {
-      prospection: 'Prospection',
-      qualification: 'Qualification',
-      proposition: 'Proposition',
-      negociation: 'Négociation',
-      gagne: 'Gagné',
-      perdu: 'Perdu'
-    }
-    return labels[status] || status
+  // Computed
+  const filtered = filter === 'all' ? opportunites : opportunites.filter(o => o.status === filter)
+  const caGagne = opportunites.filter(o => o.status === 'gagne').reduce((s, o) => s + (o.montant || 0), 0)
+  const pipeline = opportunites.filter(o => !['gagne', 'perdu'].includes(o.status)).reduce((s, o) => s + ((o.montant || 0) * (o.probabilite || 0) / 100), 0)
+  const actives = opportunites.filter(o => !['gagne', 'perdu'].includes(o.status)).length
+
+  // Card style (matching Dashboard)
+  const card = {
+    background: 'linear-gradient(135deg, rgba(18,42,51,0.95) 0%, rgba(26,58,69,0.9) 100%)',
+    borderRadius: '16px',
+    border: '1px solid rgba(212,175,55,0.12)',
+    backdropFilter: 'blur(12px)',
+    color: '#e2e8f0'
   }
 
-  if (loading) {
-    return <div className="loading"><div className="loading-spinner"></div></div>
-  }
-
-  const caGagne = opportunites
-    .filter(o => o.status === 'gagne')
-    .reduce((sum, o) => sum + (o.montant || 0), 0)
-
-  const pipeline = opportunites
-    .filter(o => o.status !== 'gagne' && o.status !== 'perdu')
-    .reduce((sum, o) => sum + ((o.montant || 0) * ((o.probabilite || 0) / 100)), 0)
+  if (loading) return (
+    <div style={{ display: 'flex', justifyContent: 'center', padding: '4rem' }}>
+      <div style={{ width: 40, height: 40, border: '3px solid rgba(212,175,55,0.2)', borderTopColor: '#D4AF37', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
 
   return (
     <div>
-      <div className="stats-grid" style={{marginBottom: '2rem'}}>
-        <div className="stat-card">
-          <div className="stat-label">💰 CA Gagné</div>
-          <div className="stat-value">{Math.round(caGagne).toLocaleString('fr-FR')} €</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">📈 Pipeline</div>
-          <div className="stat-value">{Math.round(pipeline).toLocaleString('fr-FR')} €</div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-label">💼 Opportunités actives</div>
-          <div className="stat-value">
-            {opportunites.filter(o => o.status !== 'gagne' && o.status !== 'perdu').length}
+      {/* ── STATS ── */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '1rem',
+        marginBottom: '2rem'
+      }}>
+        {[
+          { icon: '💰', label: 'CA Gagné', value: `${fmt(caGagne)} €`, accent: '#34d399' },
+          { icon: '📊', label: 'Pipeline', value: `${fmt(Math.round(pipeline))} €`, accent: '#60a5fa' },
+          { icon: '🎯', label: 'Actives', value: actives, accent: '#D4AF37' }
+        ].map((s, i) => (
+          <div key={i} style={{
+            ...card,
+            padding: '1.25rem 1.5rem',
+            borderTop: `3px solid ${s.accent}`
+          }}>
+            <div style={{ fontSize: '0.8rem', color: '#8ba5b0', marginBottom: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+              <span>{s.icon}</span> {s.label}
+            </div>
+            <div style={{ fontSize: '1.6rem', fontWeight: 700, color: '#fff' }}>{s.value}</div>
           </div>
+        ))}
+      </div>
+
+      {/* ── HEADER + FILTERS ── */}
+      <div style={{ ...card, padding: '1.5rem 2rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#fff', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            💼 Opportunités <span style={{ fontSize: '0.9rem', color: '#8ba5b0', fontWeight: 400 }}>({filtered.length})</span>
+          </h2>
+          <button onClick={openNew} style={{
+            background: 'linear-gradient(135deg, #D4AF37, #c9a02e)',
+            border: 'none', borderRadius: '8px', color: '#122a33',
+            padding: '0.6rem 1.4rem', fontWeight: 700, fontSize: '0.9rem',
+            cursor: 'pointer', transition: 'opacity 0.2s'
+          }}>+ Nouvelle opportunité</button>
+        </div>
+
+        {/* Filter pills */}
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          {[
+            { id: 'all', label: 'Toutes' },
+            ...Object.entries(STATUS_CONFIG).map(([id, cfg]) => ({ id, label: cfg.label }))
+          ].map(f => (
+            <button key={f.id} onClick={() => setFilter(f.id)} style={{
+              background: filter === f.id ? 'rgba(212,175,55,0.2)' : 'rgba(255,255,255,0.05)',
+              border: filter === f.id ? '1px solid rgba(212,175,55,0.5)' : '1px solid rgba(255,255,255,0.08)',
+              color: filter === f.id ? '#D4AF37' : '#8ba5b0',
+              padding: '0.35rem 0.9rem', borderRadius: '20px', fontSize: '0.78rem',
+              fontWeight: filter === f.id ? 600 : 400, cursor: 'pointer', transition: 'all 0.2s'
+            }}>{f.label}</button>
+          ))}
         </div>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <h2 className="card-title">💼 Opportunités ({opportunites.length})</h2>
-          <button className="btn btn-primary" onClick={openNewModal}>
-            + Nouvelle opportunité
-          </button>
-        </div>
-
-        <div className="table-container">
-          <table>
+      {/* ── TABLE ── */}
+      <div style={{ ...card, overflow: 'hidden' }}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr>
-                <th>Nom</th>
-                <th>Client</th>
-                <th>Type</th>
-                <th>Statut</th>
-                <th>Montant</th>
-                <th>Proba</th>
-                <th>CA Prévu</th>
-                <th>Actions</th>
+              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                {['Nom', 'Client', 'Type', 'Statut', 'Montant', 'Proba', 'CA Prévu', 'Actions'].map(h => (
+                  <th key={h} style={{
+                    padding: '0.9rem 1rem', textAlign: 'left', fontSize: '0.72rem',
+                    fontWeight: 600, color: '#64808b', textTransform: 'uppercase',
+                    letterSpacing: '0.06em'
+                  }}>{h}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
-              {opportunites.map(opp => (
-                <tr key={opp.id}>
-                  <td style={{fontWeight: 600}}>{opp.name}</td>
-                  <td>{opp.contacts?.name || '-'}</td>
-                  <td>
-                    <span className="badge badge-info">
-                      {opp.type?.toUpperCase()}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`badge ${getStatusBadge(opp.status)}`}>
-                      {getStatusLabel(opp.status)}
-                    </span>
-                  </td>
-                  <td>{(opp.montant || 0).toLocaleString('fr-FR')} €</td>
-                  <td>{opp.probabilite}%</td>
-                  <td style={{fontWeight: 600}}>
-                    {Math.round((opp.montant || 0) * ((opp.probabilite || 0) / 100)).toLocaleString('fr-FR')} €
-                  </td>
-                  <td>
-                    <button 
-                      className="btn btn-secondary" 
-                      style={{marginRight: '0.5rem'}}
-                      onClick={() => openEditModal(opp)}
-                    >
-                      ✏️
-                    </button>
-                    <button 
-                      className="btn btn-danger"
-                      onClick={() => handleDelete(opp.id)}
-                    >
-                      🗑️
-                    </button>
-                  </td>
-                </tr>
-              ))}
+              {filtered.length === 0 ? (
+                <tr><td colSpan={8} style={{ padding: '3rem', textAlign: 'center', color: '#64808b' }}>
+                  Aucune opportunité trouvée
+                </td></tr>
+              ) : filtered.map((opp, idx) => {
+                const st = STATUS_CONFIG[opp.status] || STATUS_CONFIG.prospection
+                const tp = TYPE_CONFIG[opp.type] || TYPE_CONFIG.AT
+                const caPrevu = Math.round((opp.montant || 0) * (opp.probabilite || 0) / 100)
+                return (
+                  <tr key={opp.id} style={{
+                    borderBottom: '1px solid rgba(255,255,255,0.04)',
+                    transition: 'background 0.15s',
+                    cursor: 'default'
+                  }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(212,175,55,0.04)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: '#f1f5f9', fontSize: '0.9rem' }}>
+                      {opp.name || '—'}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem', color: '#94a3b8', fontSize: '0.85rem' }}>
+                      {getContactName(opp.contact_id)}
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '0.2rem 0.6rem',
+                        borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600,
+                        color: tp.color, background: `${tp.color}18`, letterSpacing: '0.03em'
+                      }}>{tp.label}</span>
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <span style={{
+                        display: 'inline-block', padding: '0.25rem 0.75rem',
+                        borderRadius: '20px', fontSize: '0.75rem', fontWeight: 600,
+                        color: st.color, background: st.bg
+                      }}>{st.label}</span>
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem', color: '#e2e8f0', fontWeight: 600, fontSize: '0.9rem' }}>
+                      {fmt(opp.montant)} €
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <div style={{
+                          width: '48px', height: '6px', borderRadius: '3px',
+                          background: 'rgba(255,255,255,0.08)', overflow: 'hidden'
+                        }}>
+                          <div style={{
+                            width: `${opp.probabilite || 0}%`, height: '100%',
+                            borderRadius: '3px',
+                            background: (opp.probabilite || 0) >= 80 ? '#34d399'
+                              : (opp.probabilite || 0) >= 50 ? '#D4AF37'
+                              : '#f59e0b'
+                          }} />
+                        </div>
+                        <span style={{ color: '#8ba5b0', fontSize: '0.8rem' }}>{opp.probabilite || 0}%</span>
+                      </div>
+                    </td>
+                    <td style={{
+                      padding: '0.85rem 1rem', fontWeight: 700, fontSize: '0.9rem',
+                      color: opp.status === 'gagne' ? '#34d399' : '#D4AF37'
+                    }}>
+                      {fmt(caPrevu)} €
+                    </td>
+                    <td style={{ padding: '0.85rem 1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.3rem' }}>
+                        <button onClick={() => openEdit(opp)} style={{
+                          background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)',
+                          color: '#60a5fa', width: '32px', height: '32px', borderRadius: '6px',
+                          cursor: 'pointer', fontSize: '0.85rem', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
+                        }}>✏️</button>
+                        <button onClick={() => handleDelete(opp.id)} style={{
+                          background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)',
+                          color: '#f87171', width: '32px', height: '32px', borderRadius: '6px',
+                          cursor: 'pointer', fontSize: '0.85rem', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
+                        }}>🗑️</button>
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
+      {/* ── MODAL ── */}
       {showModal && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <div className="modal-header">
-              <h3 className="modal-title">
-                {editingOpp ? 'Modifier l\'opportunité' : 'Nouvelle opportunité'}
+        <div style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)'
+        }} onClick={() => setShowModal(false)}>
+          <div style={{
+            ...card,
+            width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto',
+            padding: '2rem', boxShadow: '0 24px 64px rgba(0,0,0,0.4)'
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', margin: 0 }}>
+                {editingOpp ? '✏️ Modifier' : '➕ Nouvelle opportunité'}
               </h3>
-              <button className="modal-close" onClick={() => setShowModal(false)}>
-                ×
-              </button>
+              <button onClick={() => setShowModal(false)} style={{
+                background: 'none', border: 'none', color: '#64808b',
+                fontSize: '1.4rem', cursor: 'pointer'
+              }}>×</button>
             </div>
 
             <form onSubmit={handleSubmit}>
-              <div className="form-group">
-                <label className="form-label">Nom *</label>
-                <input
-                  type="text"
-                  className="form-input"
-                  value={formData.name}
+              {/* Name */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Nom de l'opportunité *</label>
+                <input type="text" required value={formData.name}
                   onChange={e => setFormData({...formData, name: e.target.value})}
-                  required
-                />
+                  style={inputStyle} />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Client</label>
-                <select
-                  className="form-select"
-                  value={formData.contact_id}
-                  onChange={e => setFormData({...formData, contact_id: e.target.value})}
-                >
-                  <option value="">-- Sélectionner un client --</option>
-                  {contacts.map(contact => (
-                    <option key={contact.id} value={contact.id}>
-                      {contact.name} {contact.company ? `(${contact.company})` : ''}
-                    </option>
-                  ))}
-                </select>
+              {/* Client + Type */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>Client</label>
+                  <select value={formData.contact_id}
+                    onChange={e => setFormData({...formData, contact_id: e.target.value})}
+                    style={inputStyle}>
+                    <option value="">— Sélectionner —</option>
+                    {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Type</label>
+                  <select value={formData.type}
+                    onChange={e => setFormData({...formData, type: e.target.value})}
+                    style={inputStyle}>
+                    <option value="AT">Assistance Technique</option>
+                    <option value="FORFAIT">Forfait</option>
+                    <option value="REGIE">Régie</option>
+                    <option value="CONSEIL">Conseil</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Type</label>
-                <select
-                  className="form-select"
-                  value={formData.type}
-                  onChange={e => setFormData({...formData, type: e.target.value})}
-                >
-                  <option value="at">AT (Assistance Technique)</option>
-                  <option value="regie">Régie</option>
-                  <option value="forfait">Forfait</option>
-                  <option value="conseil">Conseil</option>
-                </select>
+              {/* Status + Proba */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>Statut</label>
+                  <select value={formData.status}
+                    onChange={e => setFormData({...formData, status: e.target.value})}
+                    style={inputStyle}>
+                    {Object.entries(STATUS_CONFIG).map(([k, v]) => (
+                      <option key={k} value={k}>{v.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Probabilité (%)</label>
+                  <input type="number" min="0" max="100" value={formData.probabilite}
+                    onChange={e => setFormData({...formData, probabilite: Number(e.target.value)})}
+                    style={inputStyle} />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Statut</label>
-                <select
-                  className="form-select"
-                  value={formData.status}
-                  onChange={e => setFormData({...formData, status: e.target.value})}
-                >
-                  <option value="prospection">Prospection</option>
-                  <option value="qualification">Qualification</option>
-                  <option value="proposition">Proposition</option>
-                  <option value="negociation">Négociation</option>
-                  <option value="gagne">Gagné</option>
-                  <option value="perdu">Perdu</option>
-                </select>
+              {/* TJM + Jours + Montant */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>TJM (€)</label>
+                  <input type="number" min="0" value={formData.tjm}
+                    onChange={e => setFormData({...formData, tjm: Number(e.target.value)})}
+                    style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Nb jours</label>
+                  <input type="number" min="0" value={formData.nb_jours}
+                    onChange={e => setFormData({...formData, nb_jours: Number(e.target.value)})}
+                    style={inputStyle} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Montant (€)</label>
+                  <input type="number" min="0"
+                    value={formData.tjm && formData.nb_jours ? formData.tjm * formData.nb_jours : formData.montant}
+                    onChange={e => setFormData({...formData, montant: Number(e.target.value)})}
+                    style={inputStyle} />
+                </div>
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Montant (€)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={formData.montant}
-                  onChange={e => setFormData({...formData, montant: e.target.value})}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Probabilité (%)</label>
-                <input
-                  type="number"
-                  min="0"
-                  max="100"
-                  className="form-input"
-                  value={formData.probabilite}
-                  onChange={e => setFormData({...formData, probabilite: e.target.value})}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">TJM (€)</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={formData.tjm}
-                  onChange={e => setFormData({...formData, tjm: e.target.value})}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Nombre de jours</label>
-                <input
-                  type="number"
-                  className="form-input"
-                  value={formData.nb_jours}
-                  onChange={e => setFormData({...formData, nb_jours: e.target.value})}
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Date de closing</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={formData.closing_date}
+              {/* Closing date */}
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Date de closing</label>
+                <input type="date" value={formData.closing_date}
                   onChange={e => setFormData({...formData, closing_date: e.target.value})}
-                />
+                  style={inputStyle} />
               </div>
 
-              <div className="form-group">
-                <label className="form-label">Notes</label>
-                <textarea
-                  className="form-textarea"
-                  value={formData.notes}
+              {/* Notes */}
+              <div style={{ marginBottom: '1.5rem' }}>
+                <label style={labelStyle}>Notes</label>
+                <textarea rows={3} value={formData.notes}
                   onChange={e => setFormData({...formData, notes: e.target.value})}
-                />
+                  style={{...inputStyle, resize: 'vertical'}} />
               </div>
 
-              <div className="modal-footer">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>
-                  Annuler
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  {editingOpp ? 'Mettre à jour' : 'Créer'}
-                </button>
+              {/* Buttons */}
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowModal(false)} style={{
+                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#8ba5b0', padding: '0.6rem 1.4rem', borderRadius: '8px',
+                  fontSize: '0.9rem', cursor: 'pointer'
+                }}>Annuler</button>
+                <button type="submit" style={{
+                  background: 'linear-gradient(135deg, #D4AF37, #c9a02e)',
+                  border: 'none', color: '#122a33', padding: '0.6rem 1.8rem',
+                  borderRadius: '8px', fontWeight: 700, fontSize: '0.9rem', cursor: 'pointer'
+                }}>{editingOpp ? 'Mettre à jour' : 'Créer'}</button>
               </div>
             </form>
           </div>
@@ -397,4 +426,20 @@ export default function Opportunites() {
       )}
     </div>
   )
+}
+
+// Shared styles
+const labelStyle = {
+  display: 'block', color: '#8ba5b0', fontSize: '0.78rem',
+  fontWeight: 500, marginBottom: '0.3rem', letterSpacing: '0.03em',
+  textTransform: 'uppercase'
+}
+
+const inputStyle = {
+  width: '100%', padding: '0.65rem 0.9rem',
+  background: 'rgba(255,255,255,0.06)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  borderRadius: '8px', color: '#e2e8f0', fontSize: '0.9rem',
+  outline: 'none', boxSizing: 'border-box',
+  transition: 'border-color 0.2s'
 }

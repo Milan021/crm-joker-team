@@ -2,37 +2,33 @@ import { useState } from 'react'
 import { supabase } from '../supabase'
 
 export default function Login({ onLogin }) {
-  const [loading, setLoading] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
-  const [error, setError] = useState(null)
 
-  const handleSubmit = async (e) => {
+  async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
-    setError(null)
+    setError('')
 
     try {
+      let result
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-        })
-        if (error) throw error
-        alert('✅ Compte créé ! Vérifiez votre email pour confirmer votre inscription.')
+        result = await supabase.auth.signUp({ email, password })
+        if (result.error) throw result.error
+        setError('✅ Compte créé ! Vérifiez votre email pour confirmer.')
+        setIsSignUp(false)
+        setLoading(false)
+        return
       } else {
-        const { error, data } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        })
-        if (error) throw error
-        if (data?.user) {
-          onLogin(data.user)
-        }
+        result = await supabase.auth.signInWithPassword({ email, password })
+        if (result.error) throw result.error
+        onLogin(result.data.user)
       }
-    } catch (error) {
-      setError(error.message)
+    } catch (err) {
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -44,189 +40,210 @@ export default function Login({ onLogin }) {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      background: 'linear-gradient(135deg, #2C4F5A 0%, #1a3540 100%)'
+      background: '#122a33',
+      position: 'relative',
+      overflow: 'hidden'
     }}>
+      {/* Subtle geometric pattern overlay */}
       <div style={{
-        background: 'white',
-        padding: '3rem',
-        borderRadius: '16px',
-        boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+        position: 'absolute',
+        inset: 0,
+        backgroundImage: `
+          radial-gradient(circle at 20% 30%, rgba(212,175,55,0.06) 0%, transparent 50%),
+          radial-gradient(circle at 80% 70%, rgba(150,190,200,0.05) 0%, transparent 50%)
+        `,
+        pointerEvents: 'none'
+      }} />
+
+      <div style={{
         width: '100%',
-        maxWidth: '400px'
+        maxWidth: '420px',
+        padding: '0 1.5rem',
+        position: 'relative',
+        zIndex: 1
       }}>
-        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-          <img 
-            src="https://joker-team.fr/wp-content/uploads/2022/10/Logo-Joker-blanc.svg"
-            alt="Joker Team"
-            style={{ 
-              height: '60px',
-              marginBottom: '1rem',
-              filter: 'brightness(0) saturate(100%) invert(23%) sepia(15%) saturate(1847%) hue-rotate(142deg) brightness(95%) contrast(91%)'
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+          <img
+            src="/logo-joker-team.png"
+            alt="Joker Team - La carte pour réussir"
+            style={{
+              maxWidth: '260px',
+              width: '100%',
+              height: 'auto',
+              marginBottom: '0.5rem'
+            }}
+            onError={(e) => {
+              e.target.style.display = 'none'
             }}
           />
-          <h1 style={{
-            fontSize: '2rem',
-            fontWeight: 700,
-            color: '#1e293b',
-            marginBottom: '0.5rem'
-          }}>
-            🃏 CRM Joker Team
-          </h1>
-          <p style={{ color: '#64748b', fontSize: '0.9rem' }}>
-            {isSignUp ? 'Créer votre compte' : 'Connectez-vous à votre espace'}
-          </p>
-        </div>
-        
-        {error && (
-          <div style={{
-            background: '#fee2e2',
-            color: '#991b1b',
-            padding: '1rem',
-            borderRadius: '8px',
-            marginBottom: '1rem',
-            borderLeft: '4px solid #ef4444',
-            fontSize: '0.9rem'
-          }}>
-            {error}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          <div style={{ marginBottom: '1.2rem' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '0.5rem',
-              fontWeight: 500,
-              color: '#475569',
-              fontSize: '0.9rem'
-            }}>
-              Email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              placeholder="votre@email.com"
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                fontSize: '0.95rem',
-                transition: 'all 0.2s',
-                outline: 'none'
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = '#2C4F5A'
-                e.target.style.boxShadow = '0 0 0 3px rgba(44, 79, 90, 0.1)'
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = '#e2e8f0'
-                e.target.style.boxShadow = 'none'
-              }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '1.5rem' }}>
-            <label style={{
-              display: 'block',
-              marginBottom: '0.5rem',
-              fontWeight: 500,
-              color: '#475569',
-              fontSize: '0.9rem'
-            }}>
-              Mot de passe
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              minLength={6}
-              placeholder="••••••••"
-              style={{
-                width: '100%',
-                padding: '0.75rem',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                fontSize: '0.95rem',
-                transition: 'all 0.2s',
-                outline: 'none'
-              }}
-              onFocus={(e) => {
-                e.target.style.borderColor = '#2C4F5A'
-                e.target.style.boxShadow = '0 0 0 3px rgba(44, 79, 90, 0.1)'
-              }}
-              onBlur={(e) => {
-                e.target.style.borderColor = '#e2e8f0'
-                e.target.style.boxShadow = 'none'
-              }}
-            />
-          </div>
-
-          <button 
-            type="submit" 
-            disabled={loading}
-            style={{
-              width: '100%',
-              padding: '0.875rem',
-              background: 'linear-gradient(135deg, #2C4F5A 0%, #1a3540 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontSize: '1rem',
-              fontWeight: 600,
-              cursor: loading ? 'not-allowed' : 'pointer',
-              transition: 'all 0.2s',
-              opacity: loading ? 0.7 : 1
-            }}
-            onMouseEnter={(e) => {
-              if (!loading) {
-                e.target.style.transform = 'translateY(-2px)'
-                e.target.style.boxShadow = '0 8px 20px rgba(44, 79, 90, 0.3)'
-              }
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'translateY(0)'
-              e.target.style.boxShadow = 'none'
-            }}
-          >
-            {loading ? 'Chargement...' : (isSignUp ? '✨ Créer un compte' : '🔐 Se connecter')}
-          </button>
-        </form>
-
-        <div style={{ textAlign: 'center', marginTop: '1.5rem' }}>
-          <button
-            onClick={() => {
-              setIsSignUp(!isSignUp)
-              setError(null)
-            }}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#2C4F5A',
-              cursor: 'pointer',
-              textDecoration: 'underline',
-              fontSize: '0.9rem',
-              fontWeight: 500
-            }}
-          >
-            {isSignUp ? '← Déjà un compte ? Se connecter' : '→ Pas de compte ? Créer un compte'}
-          </button>
         </div>
 
+        {/* Card */}
         <div style={{
-          marginTop: '2rem',
-          paddingTop: '1.5rem',
-          borderTop: '1px solid #e2e8f0',
-          textAlign: 'center',
-          color: '#94a3b8',
-          fontSize: '0.8rem'
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(212,175,55,0.15)',
+          borderRadius: '16px',
+          padding: '2.5rem 2rem',
+          backdropFilter: 'blur(12px)'
         }}>
-          <div>🃏 Joker Team - La carte pour réussir</div>
-          <div style={{ marginTop: '0.25rem' }}>CRM Pro © 2026</div>
+          <h2 style={{
+            textAlign: 'center',
+            color: '#D4AF37',
+            fontSize: '1.15rem',
+            fontWeight: 600,
+            letterSpacing: '0.08em',
+            marginBottom: '2rem',
+            textTransform: 'uppercase'
+          }}>
+            {isSignUp ? 'Créer un compte' : 'Connexion CRM'}
+          </h2>
+
+          <form onSubmit={handleSubmit}>
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{
+                display: 'block',
+                color: '#8ba5b0',
+                fontSize: '0.8rem',
+                fontWeight: 500,
+                marginBottom: '0.4rem',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase'
+              }}>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  transition: 'border-color 0.2s',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => e.target.style.borderColor = 'rgba(212,175,55,0.5)'}
+                onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                placeholder="votre@email.fr"
+              />
+            </div>
+
+            <div style={{ marginBottom: '1.75rem' }}>
+              <label style={{
+                display: 'block',
+                color: '#8ba5b0',
+                fontSize: '0.8rem',
+                fontWeight: 500,
+                marginBottom: '0.4rem',
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase'
+              }}>Mot de passe</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                disabled={loading}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1rem',
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  color: '#e2e8f0',
+                  fontSize: '0.95rem',
+                  outline: 'none',
+                  transition: 'border-color 0.2s',
+                  boxSizing: 'border-box'
+                }}
+                onFocus={(e) => e.target.style.borderColor = 'rgba(212,175,55,0.5)'}
+                onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                placeholder="••••••••"
+              />
+            </div>
+
+            {error && (
+              <div style={{
+                padding: '0.75rem 1rem',
+                background: error.startsWith('✅')
+                  ? 'rgba(34,197,94,0.1)'
+                  : 'rgba(239,68,68,0.1)',
+                border: `1px solid ${error.startsWith('✅') ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                borderRadius: '8px',
+                color: error.startsWith('✅') ? '#4ade80' : '#fca5a5',
+                fontSize: '0.85rem',
+                marginBottom: '1.25rem',
+                lineHeight: 1.5
+              }}>
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                width: '100%',
+                padding: '0.85rem',
+                background: loading
+                  ? 'rgba(212,175,55,0.3)'
+                  : 'linear-gradient(135deg, #D4AF37 0%, #c9a02e 100%)',
+                border: 'none',
+                borderRadius: '8px',
+                color: '#122a33',
+                fontSize: '0.95rem',
+                fontWeight: 700,
+                cursor: loading ? 'wait' : 'pointer',
+                letterSpacing: '0.04em',
+                transition: 'opacity 0.2s, transform 0.1s',
+                opacity: loading ? 0.7 : 1
+              }}
+              onMouseEnter={(e) => { if (!loading) e.target.style.opacity = '0.9' }}
+              onMouseLeave={(e) => { if (!loading) e.target.style.opacity = '1' }}
+            >
+              {loading ? 'Connexion...' : (isSignUp ? 'Créer le compte' : 'Se connecter')}
+            </button>
+          </form>
+
+          <div style={{
+            textAlign: 'center',
+            marginTop: '1.5rem',
+            paddingTop: '1.25rem',
+            borderTop: '1px solid rgba(255,255,255,0.06)'
+          }}>
+            <button
+              onClick={() => { setIsSignUp(!isSignUp); setError('') }}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#8ba5b0',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                textDecoration: 'underline',
+                textUnderlineOffset: '3px'
+              }}
+            >
+              {isSignUp ? 'Déjà un compte ? Se connecter' : 'Pas de compte ? Créer un compte'}
+            </button>
+          </div>
         </div>
+
+        {/* Footer */}
+        <p style={{
+          textAlign: 'center',
+          marginTop: '2rem',
+          color: 'rgba(139,165,176,0.4)',
+          fontSize: '0.75rem',
+          letterSpacing: '0.05em'
+        }}>
+          © {new Date().getFullYear()} Joker Team — La carte pour réussir
+        </p>
       </div>
     </div>
   )
