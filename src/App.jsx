@@ -8,6 +8,7 @@ import Candidats from './components/Candidats'
 import Veille from './components/Veille'
 import VeilleConfig from './components/VeilleConfig'
 import Matching from './components/Matching'
+import GlobalSearch from './components/GlobalSearch'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
@@ -23,26 +24,35 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [activeTab, setActiveTab] = useState('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null)
     })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
     })
-
     const handleResize = () => {
       setIsMobile(window.innerWidth < 768)
       if (window.innerWidth >= 768) setMenuOpen(false)
     }
     window.addEventListener('resize', handleResize)
 
+    // Ctrl+K global shortcut
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault()
+        setShowSearch(prev => !prev)
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown)
+
     return () => {
       subscription.unsubscribe()
       window.removeEventListener('resize', handleResize)
+      window.removeEventListener('keydown', handleKeyDown)
     }
   }, [])
 
@@ -56,12 +66,18 @@ export default function App() {
     setMenuOpen(false)
   }
 
-  if (!user) {
-    return <Login onLogin={setUser} />
-  }
+  if (!user) return <Login onLogin={setUser} />
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9' }}>
+      {/* ─── GLOBAL SEARCH OVERLAY ─── */}
+      {showSearch && (
+        <GlobalSearch
+          onNavigate={(tab) => switchTab(tab)}
+          onClose={() => setShowSearch(false)}
+        />
+      )}
+
       {/* ─── HEADER ─── */}
       <header style={{
         background: 'linear-gradient(135deg, #122a33 0%, #1a3a45 100%)',
@@ -80,7 +96,22 @@ export default function App() {
             onError={(e) => { e.target.style.display = 'none' }} />
 
           {!isMobile && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              {/* Search button */}
+              <button onClick={() => setShowSearch(true)} style={{
+                display: 'flex', alignItems: 'center', gap: '0.5rem',
+                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px', padding: '0.4rem 1rem',
+                color: '#64808b', fontSize: '0.82rem', cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}>
+                🔍 Rechercher...
+                <kbd style={{
+                  padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.6rem',
+                  background: 'rgba(255,255,255,0.08)', color: '#4a6370',
+                  border: '1px solid rgba(255,255,255,0.1)'
+                }}>Ctrl+K</kbd>
+              </button>
               <div style={{ textAlign: 'right' }}>
                 <div style={{ color: '#e2e8f0', fontSize: '0.85rem', fontWeight: 500 }}>{user.email}</div>
                 <div style={{ color: '#64808b', fontSize: '0.7rem' }}>Connecté</div>
@@ -94,10 +125,16 @@ export default function App() {
           )}
 
           {isMobile && (
-            <button onClick={() => setMenuOpen(!menuOpen)} style={{
-              background: 'none', border: 'none', color: '#D4AF37',
-              fontSize: '1.6rem', cursor: 'pointer', padding: '0.25rem', lineHeight: 1
-            }}>{menuOpen ? '✕' : '☰'}</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <button onClick={() => setShowSearch(true)} style={{
+                background: 'none', border: 'none', color: '#D4AF37',
+                fontSize: '1.3rem', cursor: 'pointer', padding: '0.25rem'
+              }}>🔍</button>
+              <button onClick={() => setMenuOpen(!menuOpen)} style={{
+                background: 'none', border: 'none', color: '#D4AF37',
+                fontSize: '1.6rem', cursor: 'pointer', padding: '0.25rem', lineHeight: 1
+              }}>{menuOpen ? '✕' : '☰'}</button>
+            </div>
           )}
         </div>
       </header>
@@ -138,7 +175,6 @@ export default function App() {
             position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)',
             zIndex: 250, animation: 'fadeIn 0.2s ease'
           }} onClick={() => setMenuOpen(false)} />
-
           <nav style={{
             position: 'fixed', top: 0, left: 0, right: 0,
             background: '#122a33', borderBottom: '3px solid #D4AF37',
@@ -156,7 +192,6 @@ export default function App() {
                 fontSize: '1.4rem', cursor: 'pointer', lineHeight: 1
               }}>✕</button>
             </div>
-
             <div style={{ padding: '0.5rem 0' }}>
               {TABS.map(tab => (
                 <button key={tab.id} onClick={() => switchTab(tab.id)} style={{
@@ -174,10 +209,7 @@ export default function App() {
                 </button>
               ))}
             </div>
-
-            <div style={{
-              padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.06)'
-            }}>
+            <div style={{ padding: '1rem 1.5rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <div style={{ color: '#64808b', fontSize: '0.8rem', marginBottom: '0.6rem' }}>{user.email}</div>
               <button onClick={handleLogout} style={{
                 background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
