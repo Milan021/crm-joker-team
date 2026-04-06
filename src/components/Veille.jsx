@@ -489,9 +489,3 @@ function ArticleCard({ item, card, onKeep, onDismiss, actionType, timeAgo }) {
     </div>
   )
 }
-
-const TYPE_BADGES = {
-  news: { label: 'Article', color: '#60a5fa', bg: 'rgba(96,165,250,0.15)' },
-  job: { label: 'Emploi', color: '#34d399', bg: 'rgba(52,211,153,0.15)' },
-  nomination: { label: 'Nomination', color: '#a78bfa', bg: 'rgba(167,139,250,0.15)' }
-}
