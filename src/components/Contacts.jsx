@@ -35,9 +35,18 @@ export default function Contacts() {
     e.preventDefault()
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      const payload = { ...formData, user_id: user?.id }
+      const payload = {
+        name: formData.name,
+        email: formData.email || null,
+        phone: formData.phone || null,
+        company: formData.company || null,
+        position: formData.position || null,
+        is_company: formData.is_company || false,
+        notes: formData.notes || null,
+        created_by: user?.id
+      }
       if (editingContact) {
-        const { user_id, ...upd } = payload
+        const { created_by, ...upd } = payload
         await supabase.from('contacts').update(upd).eq('id', editingContact.id)
       } else {
         await supabase.from('contacts').insert([payload])
