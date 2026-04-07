@@ -71,9 +71,9 @@ export default function Opportunites() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       const montant = Number(formData.tjm) * Number(formData.nb_jours) || Number(formData.montant)
-      const payload = { ...formData, montant, user_id: user?.id }
+      const payload = { ...formData, montant, created_by: user?.id }
       if (editingOpp) {
-        const { user_id, ...upd } = payload
+        const { created_by, ...upd } = payload
         await supabase.from('opportunites').update(upd).eq('id', editingOpp.id)
       } else {
         await supabase.from('opportunites').insert([payload])
