@@ -31,7 +31,7 @@ export default function Opportunites() {
   const [candidats, setCandidats] = useState([])
   const [interactions, setInteractions] = useState([])
   const [loading, setLoading] = useState(true)
-  const [view, setView] = useState('kanban') // 'kanban' or 'table'
+  const [view, setView] = useState('kanban')
   const [showModal, setShowModal] = useState(false)
   const [showInteractionModal, setShowInteractionModal] = useState(false)
   const [editingOpp, setEditingOpp] = useState(null)
@@ -69,6 +69,7 @@ export default function Opportunites() {
   async function handleSubmit(e) {
     e.preventDefault()
     try {
+      const { data: { user } } = await supabase.auth.getUser()
       const montant = Number(formData.tjm) * Number(formData.nb_jours) || Number(formData.montant)
       const payload = {
         name: formData.name,
@@ -90,6 +91,9 @@ export default function Opportunites() {
       } else {
         await supabase.from('opportunites').insert([payload])
       }
+      setShowModal(false); setEditingOpp(null); resetForm(); loadData()
+    } catch (err) { alert(`Erreur: ${err.message}`) }
+  }
 
   async function addInteraction(e) {
     e.preventDefault()
@@ -103,7 +107,6 @@ export default function Opportunites() {
         notes: interactionForm.notes,
         created_by: user?.id
       }])
-      // Update last_contact_date and next_action_date
       const updates = { last_contact_date: new Date().toISOString().slice(0, 10) }
       if (interactionForm.next_action_date) updates.next_action_date = interactionForm.next_action_date
       await supabase.from('opportunites').update(updates).eq('id', selectedOpp.id)
@@ -251,7 +254,6 @@ export default function Opportunites() {
             💼 Pipeline Opportunités
           </h2>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            {/* View toggle */}
             <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)' }}>
               <button onClick={() => setView('kanban')} style={{
                 padding: '0.45rem 1rem', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
@@ -279,7 +281,6 @@ export default function Opportunites() {
             const colOpps = opportunites.filter(o => o.status === col.id)
             const colTotal = colOpps.reduce((s, o) => s + (o.montant || 0), 0)
             const isDragOver = dragOverCol === col.id
-
             return (
               <div key={col.id}
                 onDragOver={(e) => handleDragOver(e, col.id)}
@@ -290,12 +291,9 @@ export default function Opportunites() {
                   background: isDragOver ? 'rgba(212,175,55,0.08)' : 'rgba(18,42,51,0.4)',
                   borderRadius: '12px',
                   border: isDragOver ? '2px dashed #D4AF37' : '1px solid rgba(255,255,255,0.06)',
-                  padding: '0.75rem',
-                  transition: 'all 0.2s',
+                  padding: '0.75rem', transition: 'all 0.2s',
                   maxHeight: '75vh', overflowY: 'auto'
-                }}
-              >
-                {/* Column header */}
+                }}>
                 <div style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                   marginBottom: '0.75rem', padding: '0.5rem 0.25rem',
@@ -304,25 +302,17 @@ export default function Opportunites() {
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <span>{col.icon}</span>
                     <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#e2e8f0' }}>{col.label}</span>
-                    <span style={{
-                      padding: '0.1rem 0.45rem', borderRadius: '10px', fontSize: '0.65rem',
-                      fontWeight: 700, background: `${col.color}20`, color: col.color
-                    }}>{colOpps.length}</span>
+                    <span style={{ padding: '0.1rem 0.45rem', borderRadius: '10px', fontSize: '0.65rem', fontWeight: 700, background: `${col.color}20`, color: col.color }}>{colOpps.length}</span>
                   </div>
                   <span style={{ fontSize: '0.7rem', color: '#64808b' }}>{fmt(colTotal)} €</span>
                 </div>
-
-                {/* Cards */}
                 {colOpps.map(opp => {
                   const tp = TYPE_CONFIG[opp.type] || TYPE_CONFIG.AT
                   const lastDays = daysSince(opp.last_contact_date)
                   const oppInts = getOppInteractions(opp.id)
                   const needsAction = lastDays === null || lastDays > 7
-
                   return (
-                    <div key={opp.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, opp)}
+                    <div key={opp.id} draggable onDragStart={(e) => handleDragStart(e, opp)}
                       style={{
                         ...card, padding: '0.85rem', marginBottom: '0.5rem',
                         cursor: 'grab', transition: 'all 0.15s',
@@ -330,69 +320,34 @@ export default function Opportunites() {
                         opacity: draggedItem?.id === opp.id ? 0.4 : 1
                       }}
                       onMouseEnter={e => e.currentTarget.style.transform = 'translateY(-1px)'}
-                      onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}
-                    >
-                      {/* Card header */}
+                      onMouseLeave={e => e.currentTarget.style.transform = 'translateY(0)'}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.4rem' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f1f5f9', lineHeight: 1.3 }}>{opp.name}</span>
-                        <span style={{
-                          padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.62rem',
-                          fontWeight: 600, color: tp.color, background: `${tp.color}15`, flexShrink: 0, marginLeft: '0.3rem'
-                        }}>{tp.label}</span>
+                        <span style={{ padding: '0.1rem 0.4rem', borderRadius: '4px', fontSize: '0.62rem', fontWeight: 600, color: tp.color, background: `${tp.color}15`, flexShrink: 0, marginLeft: '0.3rem' }}>{tp.label}</span>
                       </div>
-
-                      {/* Client */}
-                      <div style={{ fontSize: '0.75rem', color: '#8ba5b0', marginBottom: '0.3rem' }}>
-                        🏢 {getContactName(opp.contact_id)}
-                      </div>
-
-                      {/* Amount + probability */}
+                      <div style={{ fontSize: '0.75rem', color: '#8ba5b0', marginBottom: '0.3rem' }}>🏢 {getContactName(opp.contact_id)}</div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
                         <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#D4AF37' }}>{fmt(opp.montant)} €</span>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                           <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
-                            <div style={{
-                              width: `${opp.probabilite || 0}%`, height: '100%', borderRadius: '2px',
-                              background: (opp.probabilite || 0) >= 80 ? '#34d399' : (opp.probabilite || 0) >= 50 ? '#D4AF37' : '#f59e0b'
-                            }} />
+                            <div style={{ width: `${opp.probabilite || 0}%`, height: '100%', borderRadius: '2px', background: (opp.probabilite || 0) >= 80 ? '#34d399' : (opp.probabilite || 0) >= 50 ? '#D4AF37' : '#f59e0b' }} />
                           </div>
                           <span style={{ fontSize: '0.65rem', color: '#64808b' }}>{opp.probabilite || 0}%</span>
                         </div>
                       </div>
-
-                      {/* Last contact */}
                       <div style={{ fontSize: '0.68rem', color: needsAction ? '#f59e0b' : '#4a6370', marginBottom: '0.4rem' }}>
-                        {lastDays !== null ? (
-                          <>{needsAction ? '⚠️' : '✅'} Dernier contact : il y a {lastDays}j</>
-                        ) : '📞 Aucun contact enregistré'}
+                        {lastDays !== null ? (<>{needsAction ? '⚠️' : '✅'} Dernier contact : il y a {lastDays}j</>) : '📞 Aucun contact enregistré'}
                       </div>
-
-                      {/* Actions */}
                       <div style={{ display: 'flex', gap: '0.25rem', justifyContent: 'flex-end' }}>
-                        <button onClick={(e) => { e.stopPropagation(); openInteractions(opp) }} style={{
-                          background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)',
-                          color: '#60a5fa', width: '28px', height: '28px', borderRadius: '6px',
-                          cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }} title="Historique & relances">📞<sup style={{ fontSize: '0.5rem' }}>{oppInts.length}</sup></button>
-                        <button onClick={(e) => { e.stopPropagation(); openEdit(opp) }} style={{
-                          background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.2)',
-                          color: '#D4AF37', width: '28px', height: '28px', borderRadius: '6px',
-                          cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>✏️</button>
-                        <button onClick={(e) => { e.stopPropagation(); handleDelete(opp.id) }} style={{
-                          background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)',
-                          color: '#f87171', width: '28px', height: '28px', borderRadius: '6px',
-                          cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}>🗑️</button>
+                        <button onClick={(e) => { e.stopPropagation(); openInteractions(opp) }} style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Historique">📞</button>
+                        <button onClick={(e) => { e.stopPropagation(); openEdit(opp) }} style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.2)', color: '#D4AF37', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✏️</button>
+                        <button onClick={(e) => { e.stopPropagation(); handleDelete(opp.id) }} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑️</button>
                       </div>
                     </div>
                   )
                 })}
-
                 {colOpps.length === 0 && (
-                  <div style={{ padding: '1.5rem 0.5rem', textAlign: 'center', color: '#3a5560', fontSize: '0.78rem' }}>
-                    Déposez une opportunité ici
-                  </div>
+                  <div style={{ padding: '1.5rem 0.5rem', textAlign: 'center', color: '#3a5560', fontSize: '0.78rem' }}>Déposez une opportunité ici</div>
                 )}
               </div>
             )
@@ -408,10 +363,7 @@ export default function Opportunites() {
               <thead>
                 <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
                   {['Nom', 'Client', 'Type', 'Statut', 'Montant', 'Proba', 'Dernier contact', 'Actions'].map(h => (
-                    <th key={h} style={{
-                      padding: '0.9rem 1rem', textAlign: 'left', fontSize: '0.72rem',
-                      fontWeight: 600, color: '#64808b', textTransform: 'uppercase', letterSpacing: '0.06em'
-                    }}>{h}</th>
+                    <th key={h} style={{ padding: '0.9rem 1rem', textAlign: 'left', fontSize: '0.72rem', fontWeight: 600, color: '#64808b', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -440,21 +392,9 @@ export default function Opportunites() {
                       </td>
                       <td style={{ padding: '0.85rem 1rem' }}>
                         <div style={{ display: 'flex', gap: '0.3rem' }}>
-                          <button onClick={() => openInteractions(opp)} style={{
-                            background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)',
-                            color: '#60a5fa', width: '32px', height: '32px', borderRadius: '6px',
-                            cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                          }}>📞<sup style={{ fontSize: '0.55rem' }}>{oppInts.length}</sup></button>
-                          <button onClick={() => openEdit(opp)} style={{
-                            background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.2)',
-                            color: '#D4AF37', width: '32px', height: '32px', borderRadius: '6px',
-                            cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                          }}>✏️</button>
-                          <button onClick={() => handleDelete(opp.id)} style={{
-                            background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)',
-                            color: '#f87171', width: '32px', height: '32px', borderRadius: '6px',
-                            cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center'
-                          }}>🗑️</button>
+                          <button onClick={() => openInteractions(opp)} style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>📞</button>
+                          <button onClick={() => openEdit(opp)} style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.2)', color: '#D4AF37', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✏️</button>
+                          <button onClick={() => handleDelete(opp.id)} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑️</button>
                         </div>
                       </td>
                     </tr>
@@ -471,9 +411,7 @@ export default function Opportunites() {
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setShowModal(false)}>
           <div style={{ ...card, width: '100%', maxWidth: '560px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', boxShadow: '0 24px 64px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', margin: 0 }}>
-                {editingOpp ? '✏️ Modifier' : '➕ Nouvelle opportunité'}
-              </h3>
+              <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#fff', margin: 0 }}>{editingOpp ? '✏️ Modifier' : '➕ Nouvelle opportunité'}</h3>
               <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: '#64808b', fontSize: '1.4rem', cursor: 'pointer' }}>×</button>
             </div>
             <form onSubmit={handleSubmit}>
@@ -544,17 +482,12 @@ export default function Opportunites() {
               </div>
               <button onClick={() => setShowInteractionModal(false)} style={{ background: 'none', border: 'none', color: '#64808b', fontSize: '1.4rem', cursor: 'pointer' }}>×</button>
             </div>
-
-            {/* Add interaction form */}
-            <form onSubmit={addInteraction} style={{
-              background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '1.25rem',
-              marginBottom: '1.5rem', border: '1px solid rgba(255,255,255,0.04)'
-            }}>
+            <form onSubmit={addInteraction} style={{ background: 'rgba(0,0,0,0.2)', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.5rem', border: '1px solid rgba(255,255,255,0.04)' }}>
               <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#D4AF37', marginBottom: '0.75rem' }}>➕ Nouvelle interaction</div>
               <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
                 {INTERACTION_TYPES.map(t => (
                   <button key={t.id} type="button" onClick={() => setInteractionForm({ ...interactionForm, type: t.id })} style={{
-                    padding: '0.35rem 0.75rem', borderRadius: '6px', border: 'none', cursor: 'pointer',
+                    padding: '0.35rem 0.75rem', borderRadius: '6px', cursor: 'pointer',
                     fontSize: '0.78rem', fontWeight: 600,
                     background: interactionForm.type === t.id ? `${t.color}20` : 'rgba(255,255,255,0.05)',
                     color: interactionForm.type === t.id ? t.color : '#64808b',
@@ -569,46 +502,26 @@ export default function Opportunites() {
                   <label style={{ ...labelStyle, fontSize: '0.7rem' }}>Prochaine action le</label>
                   <input type="date" value={interactionForm.next_action_date} onChange={e => setInteractionForm({ ...interactionForm, next_action_date: e.target.value })} style={inputStyle} />
                 </div>
-                <button type="submit" style={{
-                  background: 'linear-gradient(135deg, #D4AF37, #c9a02e)', border: 'none', borderRadius: '8px',
-                  color: '#122a33', padding: '0.6rem 1.4rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap'
-                }}>💾 Enregistrer</button>
+                <button type="submit" style={{ background: 'linear-gradient(135deg, #D4AF37, #c9a02e)', border: 'none', borderRadius: '8px', color: '#122a33', padding: '0.6rem 1.4rem', fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer', whiteSpace: 'nowrap' }}>💾 Enregistrer</button>
               </div>
             </form>
-
-            {/* History timeline */}
             <div style={{ fontSize: '0.82rem', fontWeight: 600, color: '#8ba5b0', marginBottom: '0.75rem' }}>
               📋 Historique ({getOppInteractions(selectedOpp.id).length} interactions)
             </div>
             {getOppInteractions(selectedOpp.id).length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: '#4a6370', fontSize: '0.85rem' }}>
-                Aucune interaction enregistrée
-              </div>
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#4a6370', fontSize: '0.85rem' }}>Aucune interaction enregistrée</div>
             ) : (
               <div style={{ position: 'relative', paddingLeft: '1.5rem' }}>
-                {/* Timeline line */}
                 <div style={{ position: 'absolute', left: '8px', top: 0, bottom: 0, width: '2px', background: 'rgba(255,255,255,0.06)' }} />
                 {getOppInteractions(selectedOpp.id).map((int, i) => {
                   const typeInfo = INTERACTION_TYPES.find(t => t.id === int.type) || INTERACTION_TYPES[4]
                   return (
                     <div key={int.id || i} style={{ position: 'relative', marginBottom: '1rem', paddingLeft: '1rem' }}>
-                      {/* Dot */}
-                      <div style={{
-                        position: 'absolute', left: '-1.5rem', top: '4px',
-                        width: '18px', height: '18px', borderRadius: '50%',
-                        background: `${typeInfo.color}20`, border: `2px solid ${typeInfo.color}`,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: '0.55rem', zIndex: 1
-                      }}>{typeInfo.icon}</div>
-                      <div style={{
-                        background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '0.75rem',
-                        border: '1px solid rgba(255,255,255,0.04)'
-                      }}>
+                      <div style={{ position: 'absolute', left: '-1.5rem', top: '4px', width: '18px', height: '18px', borderRadius: '50%', background: `${typeInfo.color}20`, border: `2px solid ${typeInfo.color}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.55rem', zIndex: 1 }}>{typeInfo.icon}</div>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: '8px', padding: '0.75rem', border: '1px solid rgba(255,255,255,0.04)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
                           <span style={{ fontSize: '0.78rem', fontWeight: 600, color: typeInfo.color }}>{typeInfo.icon} {typeInfo.label}</span>
-                          <span style={{ fontSize: '0.68rem', color: '#4a6370' }}>
-                            {new Date(int.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          <span style={{ fontSize: '0.68rem', color: '#4a6370' }}>{new Date(int.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
                         {int.notes && <div style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: 1.5 }}>{int.notes}</div>}
                       </div>
