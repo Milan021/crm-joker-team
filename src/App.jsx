@@ -10,6 +10,7 @@ import VeilleConfig from './components/VeilleConfig'
 import Matching from './components/Matching'
 import GlobalSearch from './components/GlobalSearch'
 import ChatBot from './components/ChatBot'
+import ContentGenerator from './components/ContentGenerator'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
@@ -17,6 +18,7 @@ const TABS = [
   { id: 'opportunites', icon: '💼', label: 'Opportunités' },
   { id: 'candidats', icon: '👔', label: 'Candidats' },
   { id: 'veille', icon: '🔍', label: 'Veille' },
+  { id: 'content', icon: '✍️', label: 'Contenu' },
   { id: 'matching', icon: '🤖', label: 'Matching IA' },
   { id: 'config', icon: '⚙️', label: 'Paramètres' }
 ]
@@ -233,6 +235,7 @@ export default function App() {
         {activeTab === 'opportunites' && <Opportunites />}
         {activeTab === 'candidats' && <Candidats />}
         {activeTab === 'veille' && <Veille />}
+        {activeTab === 'content' && <ContentGenerator />}
         {activeTab === 'matching' && <Matching />}
         {activeTab === 'config' && <VeilleConfig />}
       </main>
