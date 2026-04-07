@@ -85,7 +85,6 @@ export default function Veille() {
         relevance_score: item.relevance_score,
         published_at: item.published_at,
         is_read: false,
-        user_id: user?.id
       }, { onConflict: 'title', ignoreDuplicates: true })
       // Remove from fresh list, add to saved
       setFreshItems(prev => prev.filter(i => i.title !== item.title))
@@ -98,7 +97,6 @@ export default function Veille() {
   }
 
   async function keepAllVisible() {
-    const { data: { user } } = await supabase.auth.getUser()
     const visible = getFilteredFresh()
     for (const item of visible.slice(0, 20)) {
       try {
