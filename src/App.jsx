@@ -13,6 +13,7 @@ import ChatBot from './components/ChatBot'
 import ContentGenerator from './components/ContentGenerator'
 import MFASetup from './components/MFASetup'
 import IntercontratTracker from './components/IntercontratTracker'
+import AuditClient from './components/AuditClient'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'opportunites', icon: '💼', label: 'Opportunités' },
   { id: 'candidats', icon: '👔', label: 'Candidats' },
   { id: 'intercontrat', icon: '⏰', label: 'Intercontrat' },
+  { id: 'audit', icon: '🏦', label: 'Audit Client' },
   { id: 'veille', icon: '🔍', label: 'Veille' },
   { id: 'content', icon: '✍️', label: 'Contenu' },
   { id: 'matching', icon: '🤖', label: 'Matching IA' },
@@ -248,6 +250,7 @@ export default function App() {
           {activeTab === 'opportunites' && <Opportunites />}
           {activeTab === 'candidats' && <Candidats />}
           {activeTab === 'intercontrat' && <IntercontratTracker />}
+          {activeTab === 'audit' && <AuditClient />}
           {activeTab === 'veille' && <Veille />}
           {activeTab === 'content' && <ContentGenerator />}
           {activeTab === 'matching' && <Matching />}
