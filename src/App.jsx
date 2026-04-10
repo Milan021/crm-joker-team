@@ -11,6 +11,7 @@ import Matching from './components/Matching'
 import GlobalSearch from './components/GlobalSearch'
 import ChatBot from './components/ChatBot'
 import ContentGenerator from './components/ContentGenerator'
+import MFASetup from './components/MFASetup'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
@@ -28,6 +29,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [menuOpen, setMenuOpen] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [mfaVerified, setMfaVerified] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768)
 
   useEffect(() => {
@@ -70,6 +72,14 @@ export default function App() {
   }
 
   if (!user) return <Login onLogin={setUser} />
+
+  // Show MFA setup/verify after login
+  if (!mfaVerified) {
+    return <MFASetup 
+      onVerified={() => setMfaVerified(true)} 
+      onSkip={() => setMfaVerified(true)} 
+    />
+  }
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9' }}>
