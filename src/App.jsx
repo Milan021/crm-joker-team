@@ -12,12 +12,14 @@ import GlobalSearch from './components/GlobalSearch'
 import ChatBot from './components/ChatBot'
 import ContentGenerator from './components/ContentGenerator'
 import MFASetup from './components/MFASetup'
+import IntercontratTracker from './components/IntercontratTracker'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
   { id: 'contacts', icon: '👥', label: 'Contacts' },
   { id: 'opportunites', icon: '💼', label: 'Opportunités' },
   { id: 'candidats', icon: '👔', label: 'Candidats' },
+  { id: 'intercontrat', icon: '⏰', label: 'Intercontrat' },
   { id: 'veille', icon: '🔍', label: 'Veille' },
   { id: 'content', icon: '✍️', label: 'Contenu' },
   { id: 'matching', icon: '🤖', label: 'Matching IA' },
@@ -240,14 +242,17 @@ export default function App() {
         padding: isMobile ? '1rem 0.75rem' : '2rem',
         paddingBottom: isMobile ? '5rem' : '2rem'
       }}>
-        {activeTab === 'dashboard' && <Dashboard onNavigate={switchTab} />}
-        {activeTab === 'contacts' && <Contacts />}
-        {activeTab === 'opportunites' && <Opportunites />}
-        {activeTab === 'candidats' && <Candidats />}
-        {activeTab === 'veille' && <Veille />}
-        {activeTab === 'content' && <ContentGenerator />}
-        {activeTab === 'matching' && <Matching />}
-        {activeTab === 'config' && <VeilleConfig />}
+        <div key={activeTab} style={{ animation: 'fadeSlideIn 0.3s ease' }}>
+          {activeTab === 'dashboard' && <Dashboard onNavigate={switchTab} />}
+          {activeTab === 'contacts' && <Contacts />}
+          {activeTab === 'opportunites' && <Opportunites />}
+          {activeTab === 'candidats' && <Candidats />}
+          {activeTab === 'intercontrat' && <IntercontratTracker />}
+          {activeTab === 'veille' && <Veille />}
+          {activeTab === 'content' && <ContentGenerator />}
+          {activeTab === 'matching' && <Matching />}
+          {activeTab === 'config' && <VeilleConfig />}
+        </div>
       </main>
 
       {/* ─── MOBILE BOTTOM TAB BAR ─── */}
@@ -280,6 +285,7 @@ export default function App() {
       <style>{`
         @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
         @keyframes slideDown { from { transform: translateY(-100%) } to { transform: translateY(0) } }
+        @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(12px) } to { opacity: 1; transform: translateY(0) } }
       `}</style>
     </div>
   )
