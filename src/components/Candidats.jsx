@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import DossierCompetences from './DossierCompetences'
 
 const STATUS_CONFIG = {
   disponible: { label: 'Disponible', color: '#34d399', bg: 'rgba(52,211,153,0.15)' },
@@ -21,6 +22,7 @@ export default function Candidats() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingCandidat, setEditingCandidat] = useState(null)
+  const [dossierCandidat, setDossierCandidat] = useState(null)
   const [filter, setFilter] = useState('all')
   const [sortField, setSortField] = useState('created_at')
   const [sortDir, setSortDir] = useState('desc')
@@ -91,20 +93,17 @@ export default function Candidats() {
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
       const path = `${user.id}/${Date.now()}_${safeName}`
 
-      // Upload to storage
       const { error: uploadErr } = await supabase.storage.from('cvs').upload(path, file)
       if (uploadErr) throw uploadErr
 
       const { data: urlData } = supabase.storage.from('cvs').getPublicUrl(path)
 
-      // Update candidat
       await supabase.from('candidats').update({
         cv_url: urlData.publicUrl,
         cv_filename: file.name,
         cv_uploaded_at: new Date().toISOString()
       }).eq('id', candidatId)
 
-      // Try parsing with API
       try {
         const reader = new FileReader()
         const base64 = await new Promise((res, rej) => {
@@ -183,7 +182,6 @@ export default function Candidats() {
     else { setSortField(field); setSortDir('desc') }
   }
 
-  // Filtering & sorting
   const now = new Date()
   const withAge = candidats.map(c => ({ ...c, _age: Math.floor((now - new Date(c.created_at)) / 86400000) }))
 
@@ -201,13 +199,11 @@ export default function Candidats() {
     return sortDir === 'asc' ? cmp : -cmp
   })
 
-  // Stats
   const dispos = candidats.filter(c => c.status === 'disponible').length
   const enMission = candidats.filter(c => c.status === 'en_mission').length
   const nouveaux = withAge.filter(c => c._age <= 7).length
   const tjmMoyen = candidats.length ? Math.round(candidats.reduce((s, c) => s + (c.tjm || 0), 0) / candidats.filter(c => c.tjm).length || 0) : 0
 
-  // Alerts: missions ending soon & recontact due
   const today = new Date().toISOString().slice(0, 10)
   const missionEndingSoon = candidats.filter(c => {
     if (!c.mission_end_date) return false
@@ -427,7 +423,14 @@ export default function Candidats() {
                     </td>
                     <td style={{ padding: '0.85rem 1rem' }}>
                       <div style={{ display: 'flex', gap: '0.3rem' }}>
-                        {/* Upload CV button */}
+                        {/* Dossier compétences */}
+                        <button onClick={() => setDossierCandidat(c)} style={{
+                          background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.2)',
+                          color: '#D4AF37', width: '32px', height: '32px', borderRadius: '6px',
+                          cursor: 'pointer', fontSize: '0.85rem', display: 'flex',
+                          alignItems: 'center', justifyContent: 'center'
+                        }} title="Dossier de compétences">📄</button>
+                        {/* Upload CV */}
                         <label style={{
                           background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)',
                           color: '#a78bfa', width: '32px', height: '32px', borderRadius: '6px',
@@ -438,12 +441,14 @@ export default function Candidats() {
                           <input type="file" accept=".pdf,.doc,.docx" style={{ display: 'none' }}
                             onChange={e => handleCVUpload(c.id, e.target.files[0])} disabled={uploading} />
                         </label>
+                        {/* Edit */}
                         <button onClick={() => openEdit(c)} style={{
                           background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)',
                           color: '#60a5fa', width: '32px', height: '32px', borderRadius: '6px',
                           cursor: 'pointer', fontSize: '0.85rem', display: 'flex',
                           alignItems: 'center', justifyContent: 'center'
                         }}>✏️</button>
+                        {/* Delete */}
                         <button onClick={() => handleDelete(c.id)} style={{
                           background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)',
                           color: '#f87171', width: '32px', height: '32px', borderRadius: '6px',
@@ -460,7 +465,7 @@ export default function Candidats() {
         </div>
       </div>
 
-      {/* ── MODAL ── */}
+      {/* ── MODAL FORMULAIRE ── */}
       {showModal && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
@@ -537,7 +542,6 @@ export default function Candidats() {
                   placeholder="COBOL, Mainframe, DB2, Java..." />
               </div>
 
-              {/* Tags / Mots-clés */}
               <div style={{ marginBottom: '1.5rem' }}>
                 <label style={labelStyle}>Mots-clés</label>
                 <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -572,7 +576,6 @@ export default function Candidats() {
                 )}
               </div>
 
-              {/* Mission fields - shown when status is en_mission */}
               {formData.status === 'en_mission' && (
                 <div style={{
                   background: 'rgba(96,165,250,0.05)', borderRadius: '10px', padding: '1.25rem',
@@ -611,7 +614,6 @@ export default function Candidats() {
                 </div>
               )}
 
-              {/* Recontact date - shown when disponible too */}
               {formData.status !== 'en_mission' && (
                 <div style={{ marginBottom: '1.5rem' }}>
                   <label style={labelStyle}>📞 Date de recontact (rappel)</label>
@@ -637,6 +639,12 @@ export default function Candidats() {
         </div>
       )}
 
+      {/* ── DOSSIER COMPÉTENCES MODAL ── */}
+      {dossierCandidat && (
+        <DossierCompetences candidat={dossierCandidat} onClose={() => setDossierCandidat(null)} />
+      )}
+
+      {/* ── UPLOAD OVERLAY ── */}
       {uploading && (
         <div style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
