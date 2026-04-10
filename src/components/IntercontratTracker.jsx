@@ -39,7 +39,7 @@ export default function IntercontratTracker() {
     if (!candidat.competences && !candidat.mots_cles?.length) return []
     const candKeywords = [
       ...(candidat.mots_cles || []),
-      ...(candidat.competences || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean)
+      ...(typeof candidat.competences === 'string' ? candidat.competences.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : Array.isArray(candidat.competences) ? candidat.competences.map(s => String(s).toLowerCase()) : [])
     ].map(k => k.toLowerCase())
 
     return opportunites.filter(opp => {
