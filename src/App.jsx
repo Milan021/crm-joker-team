@@ -14,10 +14,12 @@ import ContentGenerator from './components/ContentGenerator'
 import MFASetup from './components/MFASetup'
 import IntercontratTracker from './components/IntercontratTracker'
 import AuditClient from './components/AuditClient'
+import CopilotCommercial from './components/CopilotCommercial'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
   { id: 'contacts', icon: '👥', label: 'Contacts' },
+  { id: 'copilot', icon: '🧠', label: 'Copilot IA' },
   { id: 'opportunites', icon: '💼', label: 'Opportunités' },
   { id: 'candidats', icon: '👔', label: 'Candidats' },
   { id: 'intercontrat', icon: '⏰', label: 'Intercontrat' },
@@ -49,7 +51,6 @@ export default function App() {
     }
     window.addEventListener('resize', handleResize)
 
-    // Ctrl+K global shortcut
     const handleKeyDown = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
@@ -77,7 +78,6 @@ export default function App() {
 
   if (!user) return <Login onLogin={setUser} />
 
-  // Show MFA setup/verify after login
   if (!mfaVerified) {
     return <MFASetup 
       onVerified={() => setMfaVerified(true)} 
@@ -87,7 +87,6 @@ export default function App() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#f1f5f9' }}>
-      {/* ─── GLOBAL SEARCH OVERLAY ─── */}
       {showSearch && (
         <GlobalSearch
           onNavigate={(tab) => switchTab(tab)}
@@ -95,7 +94,7 @@ export default function App() {
         />
       )}
 
-      {/* ─── HEADER ─── */}
+      {/* HEADER */}
       <header style={{
         background: 'linear-gradient(135deg, #122a33 0%, #1a3a45 100%)',
         borderBottom: '3px solid #D4AF37',
@@ -114,7 +113,6 @@ export default function App() {
 
           {!isMobile && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              {/* Search button */}
               <button onClick={() => setShowSearch(true)} style={{
                 display: 'flex', alignItems: 'center', gap: '0.5rem',
                 background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
@@ -156,7 +154,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* ─── DESKTOP NAV ─── */}
+      {/* DESKTOP NAV */}
       {!isMobile && (
         <nav style={{
           background: '#fff', borderBottom: '1px solid #e2e8f0',
@@ -185,7 +183,7 @@ export default function App() {
         </nav>
       )}
 
-      {/* ─── MOBILE SLIDE-DOWN NAV ─── */}
+      {/* MOBILE NAV */}
       {isMobile && menuOpen && (
         <>
           <div style={{
@@ -238,7 +236,7 @@ export default function App() {
         </>
       )}
 
-      {/* ─── MAIN CONTENT ─── */}
+      {/* MAIN CONTENT */}
       <main style={{
         maxWidth: '1400px', margin: '0 auto',
         padding: isMobile ? '1rem 0.75rem' : '2rem',
@@ -247,6 +245,7 @@ export default function App() {
         <div key={activeTab} style={{ animation: 'fadeSlideIn 0.3s ease' }}>
           {activeTab === 'dashboard' && <Dashboard onNavigate={switchTab} />}
           {activeTab === 'contacts' && <Contacts />}
+          {activeTab === 'copilot' && <CopilotCommercial />}
           {activeTab === 'opportunites' && <Opportunites />}
           {activeTab === 'candidats' && <Candidats />}
           {activeTab === 'intercontrat' && <IntercontratTracker />}
@@ -258,7 +257,7 @@ export default function App() {
         </div>
       </main>
 
-      {/* ─── MOBILE BOTTOM TAB BAR ─── */}
+      {/* MOBILE BOTTOM TAB BAR */}
       {isMobile && !menuOpen && (
         <nav style={{
           position: 'fixed', bottom: 0, left: 0, right: 0,
@@ -282,7 +281,6 @@ export default function App() {
         </nav>
       )}
 
-      {/* ─── AI CHATBOT ─── */}
       <ChatBot />
 
       <style>{`
