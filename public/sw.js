@@ -1,76 +1,43 @@
-const CACHE_NAME = 'joker-crm-v2'
-const STATIC_ASSETS = [
-  '/',
-  '/index.html',
-  '/logo-joker-team.png'
-]
+const CACHE_NAME = 'crm-joker-team-v4';
 
-// Install: cache static assets
-self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS)
-    })
-  )
-  self.skipWaiting()
-})
+self.addEventListener('install', () => self.skipWaiting());
 
-// Activate: clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => {
-      return Promise.all(
-        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-      )
-    })
-  )
-  self.clients.claim()
-})
+    caches.keys().then(keys => Promise.all(
+      keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))
+    )).then(() => self.clients.claim())
+  );
+});
 
-// Fetch: network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  const { request } = event
+  const url = new URL(event.request.url);
 
-  // Skip non-GET requests
-  if (request.method !== 'GET') return
-
-  // Skip Supabase API calls (always need fresh data)
-  if (request.url.includes('supabase.co')) return
-
-  // Skip Anthropic API calls
-  if (request.url.includes('anthropic.com')) return
-
-  // For navigation requests (HTML pages): network first
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request).catch(() => caches.match('/index.html'))
-    )
-    return
+  // NEVER intercept API calls — let them go directly to the server
+  if (url.pathname.startsWith('/api/') || url.pathname.startsWith('/api')) {
+    return;
   }
 
-  // For static assets: cache first, then network
-  if (request.url.match(/\.(js|css|png|jpg|svg|woff2?)$/)) {
-    event.respondWith(
-      caches.match(request).then((cached) => {
-        const fetched = fetch(request).then((response) => {
-          const clone = response.clone()
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
-          return response
-        })
-        return cached || fetched
-      })
-    )
-    return
-  }
+  // Only cache GET requests
+  if (event.request.method !== 'GET') return;
 
-  // Everything else: network first, cache fallback
+  // Only cache same-origin requests
+  if (url.origin !== self.location.origin) return;
+
+  // Skip non-page resources that shouldn't be cached
+  if (url.pathname.startsWith('/node_modules/')) return;
+
+  // Network first strategy: try network, fallback to cache
   event.respondWith(
-    fetch(request)
-      .then((response) => {
-        const clone = response.clone()
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, clone))
-        return response
+    fetch(event.request)
+      .then(response => {
+        // Only cache successful responses
+        if (response.status === 200) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+        }
+        return response;
       })
-      .catch(() => caches.match(request))
-  )
-})
+      .catch(() => caches.match(event.request))
+  );
+});
