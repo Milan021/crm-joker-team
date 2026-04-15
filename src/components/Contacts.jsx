@@ -14,7 +14,6 @@ export default function Contacts() {
   const [formType, setFormType] = useState('person')
   const [rattacherContact, setRattacherContact] = useState(null)
   const [rattacherTarget, setRattacherTarget] = useState('')
-  const [convertContact, setConvertContact] = useState(null)
   const [formData, setFormData] = useState({
     name: '', company: '', email: '', phone: '', position: '',
     is_company: false, parent_company_id: '', notes: ''
@@ -73,7 +72,6 @@ export default function Contacts() {
     } catch (err) { alert('Erreur: ' + err.message) }
   }
 
-  // Rattacher un contact a une societe
   async function handleRattacher() {
     if (!rattacherContact || !rattacherTarget) return
     try {
@@ -90,31 +88,22 @@ export default function Contacts() {
     } catch (err) { alert('Erreur: ' + err.message) }
   }
 
-  // Detacher un contact de sa societe
   async function handleDetacher(contact) {
     if (!confirm('Detacher ' + contact.name + ' de sa societe ?')) return
     try {
-      const { error } = await supabase.from('contacts').update({
-        parent_company_id: null
-      }).eq('id', contact.id)
+      const { error } = await supabase.from('contacts').update({ parent_company_id: null }).eq('id', contact.id)
       if (error) throw error
       loadData()
     } catch (err) { alert('Erreur: ' + err.message) }
   }
 
-  // Convertir societe en contact ou contact en societe
   async function handleConvert(contact) {
     const newIsCompany = !contact.is_company
-    const msg = newIsCompany
-      ? 'Convertir ' + contact.name + ' en societe ?'
-      : 'Convertir ' + contact.name + ' en contact ?'
+    const msg = newIsCompany ? 'Convertir ' + contact.name + ' en societe ?' : 'Convertir ' + contact.name + ' en contact ?'
     if (!confirm(msg)) return
     try {
       const updates = { is_company: newIsCompany }
-      if (newIsCompany) {
-        updates.parent_company_id = null
-        updates.company = contact.name
-      }
+      if (newIsCompany) { updates.parent_company_id = null; updates.company = contact.name }
       const { error } = await supabase.from('contacts').update(updates).eq('id', contact.id)
       if (error) throw error
       loadData()
@@ -127,52 +116,30 @@ export default function Contacts() {
   }
 
   function openNew(type, companyId) {
-    setEditingContact(null)
-    resetForm()
+    setEditingContact(null); resetForm()
     if (type === 'company') {
-      setFormType('company')
-      setFormData(prev => ({ ...prev, is_company: true }))
+      setFormType('company'); setFormData(prev => ({ ...prev, is_company: true }))
     } else {
-      setFormType('person')
-      setFormData(prev => ({ ...prev, is_company: false, parent_company_id: companyId || '' }))
+      setFormType('person'); setFormData(prev => ({ ...prev, is_company: false, parent_company_id: companyId || '' }))
     }
     setShowModal(true)
   }
 
   function openEdit(c) {
-    setEditingContact(c)
-    setFormType(c.is_company ? 'company' : 'person')
-    setFormData({
-      name: c.name || '', company: c.company || '', email: c.email || '',
-      phone: c.phone || '', position: c.position || '',
-      is_company: c.is_company || false,
-      parent_company_id: c.parent_company_id || '',
-      notes: c.notes || ''
-    })
+    setEditingContact(c); setFormType(c.is_company ? 'company' : 'person')
+    setFormData({ name: c.name || '', company: c.company || '', email: c.email || '', phone: c.phone || '', position: c.position || '', is_company: c.is_company || false, parent_company_id: c.parent_company_id || '', notes: c.notes || '' })
     setShowModal(true)
   }
 
-  function toggleCompany(id) {
-    setExpandedCompanies(prev => ({ ...prev, [id]: !prev[id] }))
-  }
+  function toggleCompany(id) { setExpandedCompanies(prev => ({ ...prev, [id]: !prev[id] })) }
+  function getContactOpps(contactId) { return opportunites.filter(o => o.contact_id === contactId) }
+  function getContactInteractions(contactId) { return interactions.filter(i => i.contact_id === contactId) }
 
-  function getContactOpps(contactId) {
-    return opportunites.filter(o => o.contact_id === contactId)
-  }
-
-  function getContactInteractions(contactId) {
-    return interactions.filter(i => i.contact_id === contactId)
-  }
-
-  // Build hierarchy
   const companies = contacts.filter(c => c.is_company)
   const persons = contacts.filter(c => !c.is_company)
 
   function getCompanyContacts(company) {
-    return persons.filter(p =>
-      p.parent_company_id === company.id ||
-      (!p.parent_company_id && p.company && p.company.toLowerCase() === company.name.toLowerCase())
-    )
+    return persons.filter(p => p.parent_company_id === company.id || (!p.parent_company_id && p.company && p.company.toLowerCase() === company.name.toLowerCase()))
   }
 
   const orphanPersons = persons.filter(p => {
@@ -182,22 +149,8 @@ export default function Contacts() {
   })
 
   const searchLower = search.toLowerCase()
-  const filteredCompanies = search
-    ? companies.filter(c => {
-        const compContacts = getCompanyContacts(c)
-        return c.name.toLowerCase().includes(searchLower) ||
-          compContacts.some(p => p.name.toLowerCase().includes(searchLower) || (p.email || '').toLowerCase().includes(searchLower))
-      })
-    : companies
-
-  const filteredOrphans = search
-    ? orphanPersons.filter(p => p.name.toLowerCase().includes(searchLower) || (p.email || '').toLowerCase().includes(searchLower) || (p.company || '').toLowerCase().includes(searchLower))
-    : orphanPersons
-
-  const totalCompanies = companies.length
-  const totalPersons = persons.length
-  const totalOpps = opportunites.length
-  const caGagne = opportunites.filter(o => o.status === 'gagne').reduce((s, o) => s + (o.montant || 0), 0)
+  const filteredCompanies = search ? companies.filter(c => c.name.toLowerCase().includes(searchLower) || getCompanyContacts(c).some(p => p.name.toLowerCase().includes(searchLower) || (p.email || '').toLowerCase().includes(searchLower))) : companies
+  const filteredOrphans = search ? orphanPersons.filter(p => p.name.toLowerCase().includes(searchLower) || (p.email || '').toLowerCase().includes(searchLower) || (p.company || '').toLowerCase().includes(searchLower)) : orphanPersons
 
   const card = {
     background: 'linear-gradient(135deg, rgba(18,42,51,0.95) 0%, rgba(26,58,69,0.9) 100%)',
@@ -214,20 +167,17 @@ export default function Contacts() {
 
   return (
     <div style={{ display: 'flex', gap: '1.5rem' }}>
-      {/* LEFT: List */}
       <div style={{ flex: 1, minWidth: 0 }}>
         {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
           {[
-            { icon: '\uD83C\uDFE2', label: 'Societes', value: totalCompanies, accent: '#D4AF37' },
-            { icon: '\uD83D\uDC64', label: 'Contacts', value: totalPersons, accent: '#60a5fa' },
-            { icon: '\uD83D\uDCBC', label: 'Opportunites', value: totalOpps, accent: '#a78bfa' },
-            { icon: '\uD83D\uDCB0', label: 'CA Gagne', value: new Intl.NumberFormat('fr-FR').format(caGagne) + '\u20AC', accent: '#34d399' }
+            { icon: '🏢', label: 'Societes', value: companies.length, accent: '#D4AF37' },
+            { icon: '👤', label: 'Contacts', value: persons.length, accent: '#60a5fa' },
+            { icon: '💼', label: 'Opportunites', value: opportunites.length, accent: '#a78bfa' },
+            { icon: '💰', label: 'CA Gagne', value: new Intl.NumberFormat('fr-FR').format(opportunites.filter(o => o.status === 'gagne').reduce((s, o) => s + (o.montant || 0), 0)) + '€', accent: '#34d399' }
           ].map((s, i) => (
-            <div key={i} style={{ ...card, padding: '1rem 1.25rem', borderTop: '3px solid ' + s.accent }}>
-              <div style={{ fontSize: '0.78rem', color: '#8ba5b0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                <span>{s.icon}</span> {s.label}
-              </div>
+            <div key={i} style={{ ...card, padding: '1rem 1.25rem', borderTop: `3px solid ${s.accent}` }}>
+              <div style={{ fontSize: '0.78rem', color: '#8ba5b0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}><span>{s.icon}</span> {s.label}</div>
               <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#fff' }}>{s.value}</div>
             </div>
           ))}
@@ -236,271 +186,141 @@ export default function Contacts() {
         {/* Header */}
         <div style={{ ...card, padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
-            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff', margin: 0 }}>
-              \uD83C\uDFE2 Clients & Contacts
-            </h2>
+            <h2 style={{ fontSize: '1.3rem', fontWeight: 700, color: '#fff', margin: 0 }}>🏢 Clients & Contacts</h2>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={() => openNew('company')} style={{
-                background: 'linear-gradient(135deg, #D4AF37, #c9a02e)', border: 'none', borderRadius: '8px',
-                color: '#122a33', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer'
-              }}>+ Societe</button>
-              <button onClick={() => openNew('person')} style={{
-                background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.3)',
-                borderRadius: '8px', color: '#60a5fa', padding: '0.5rem 1rem',
-                fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer'
-              }}>+ Contact</button>
+              <button onClick={() => openNew('company')} style={{ background: 'linear-gradient(135deg, #D4AF37, #c9a02e)', border: 'none', borderRadius: '8px', color: '#122a33', padding: '0.5rem 1rem', fontWeight: 700, fontSize: '0.82rem', cursor: 'pointer' }}>+ Societe</button>
+              <button onClick={() => openNew('person')} style={{ background: 'rgba(96,165,250,0.15)', border: '1px solid rgba(96,165,250,0.3)', borderRadius: '8px', color: '#60a5fa', padding: '0.5rem 1rem', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer' }}>+ Contact</button>
             </div>
           </div>
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-            placeholder="Rechercher une societe ou un contact..."
-            style={{
-              width: '100%', padding: '0.6rem 1rem', background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px',
-              color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box'
-            }} />
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher une societe ou un contact..." style={{ width: '100%', padding: '0.6rem 1rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#e2e8f0', fontSize: '0.88rem', outline: 'none', boxSizing: 'border-box' }} />
         </div>
 
-        {/* Companies list */}
+        {/* Companies */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           {filteredCompanies.map(company => {
             const compContacts = getCompanyContacts(company)
             const compOpps = getContactOpps(company.id)
             const expanded = expandedCompanies[company.id]
             const compCA = compOpps.filter(o => o.status === 'gagne').reduce((s, o) => s + (o.montant || 0), 0)
-
             return (
               <div key={company.id} style={{ ...card, overflow: 'hidden' }}>
-                {/* Company header */}
-                <div onClick={() => toggleCompany(company.id)}
-                  style={{
-                    padding: '1rem 1.25rem', cursor: 'pointer',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    transition: 'background 0.15s', borderLeft: '4px solid #D4AF37'
-                  }}
+                <div onClick={() => toggleCompany(company.id)} style={{ padding: '1rem 1.25rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderLeft: '4px solid #D4AF37', transition: 'background 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(212,175,55,0.04)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                    <span style={{
-                      fontSize: '0.75rem', color: '#D4AF37', transition: 'transform 0.2s',
-                      transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)'
-                    }}>\u25B6</span>
+                    <span style={{ fontSize: '0.75rem', color: '#D4AF37', transition: 'transform 0.2s', transform: expanded ? 'rotate(90deg)' : 'rotate(0deg)' }}>▶</span>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontSize: '1rem' }}>\uD83C\uDFE2</span>
+                        <span>🏢</span>
                         <span style={{ fontSize: '1rem', fontWeight: 700, color: '#f1f5f9' }}>{company.name}</span>
-                        <span style={{
-                          padding: '0.1rem 0.4rem', borderRadius: '8px', fontSize: '0.65rem',
-                          fontWeight: 600, background: 'rgba(96,165,250,0.15)', color: '#60a5fa'
-                        }}>{compContacts.length} contact{compContacts.length > 1 ? 's' : ''}</span>
+                        <span style={{ padding: '0.1rem 0.4rem', borderRadius: '8px', fontSize: '0.65rem', fontWeight: 600, background: 'rgba(96,165,250,0.15)', color: '#60a5fa' }}>{compContacts.length} contact{compContacts.length > 1 ? 's' : ''}</span>
                       </div>
                       <div style={{ fontSize: '0.75rem', color: '#4a6370', marginTop: '0.15rem' }}>
-                        {company.email || ''}{company.phone ? ' \u00B7 ' + company.phone : ''}
-                        {compOpps.length > 0 ? ' \u00B7 ' + compOpps.length + ' opp.' : ''}
-                        {compCA > 0 ? ' \u00B7 CA: ' + new Intl.NumberFormat('fr-FR').format(compCA) + '\u20AC' : ''}
+                        {company.email || ''}{company.phone ? ' · ' + company.phone : ''}{compOpps.length > 0 ? ' · ' + compOpps.length + ' opp.' : ''}{compCA > 0 ? ' · CA: ' + new Intl.NumberFormat('fr-FR').format(compCA) + '€' : ''}
                       </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.3rem' }}>
-                    <button onClick={(e) => { e.stopPropagation(); openNew('person', company.id) }} style={{
-                      background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)',
-                      color: '#60a5fa', width: '30px', height: '30px', borderRadius: '6px',
-                      cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center'
-                    }} title="Ajouter un contact">+\uD83D\uDC64</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleConvert(company) }} style={{
-                      background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)',
-                      color: '#a78bfa', width: '30px', height: '30px', borderRadius: '6px',
-                      cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center'
-                    }} title="Convertir en contact">\uD83D\uDD04</button>
-                    <button onClick={(e) => { e.stopPropagation(); setSelectedContact(company) }} style={{
-                      background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.2)',
-                      color: '#D4AF37', width: '30px', height: '30px', borderRadius: '6px',
-                      cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center'
-                    }} title="Voir details">\uD83D\uDC41</button>
-                    <button onClick={(e) => { e.stopPropagation(); openEdit(company) }} style={{
-                      background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)',
-                      color: '#60a5fa', width: '30px', height: '30px', borderRadius: '6px',
-                      cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center'
-                    }}>\u270F\uFE0F</button>
+                    <button onClick={e => { e.stopPropagation(); openNew('person', company.id) }} style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa', width: '30px', height: '30px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Ajouter un contact">+👤</button>
+                    <button onClick={e => { e.stopPropagation(); handleConvert(company) }} style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.2)', color: '#a78bfa', width: '30px', height: '30px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Convertir en contact">🔄</button>
+                    <button onClick={e => { e.stopPropagation(); setSelectedContact(company) }} style={{ background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.2)', color: '#D4AF37', width: '30px', height: '30px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Voir details">👁</button>
+                    <button onClick={e => { e.stopPropagation(); openEdit(company) }} style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa', width: '30px', height: '30px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✏️</button>
                   </div>
                 </div>
-
-                {/* Contacts under company */}
                 {expanded && (
                   <div style={{ borderTop: '1px solid rgba(255,255,255,0.04)' }}>
                     {compContacts.length === 0 ? (
                       <div style={{ padding: '1rem 1.25rem 1rem 3rem', color: '#4a6370', fontSize: '0.82rem' }}>
-                        Aucun contact.{' '}
-                        <button onClick={() => openNew('person', company.id)} style={{
-                          background: 'none', border: 'none', color: '#60a5fa',
-                          cursor: 'pointer', textDecoration: 'underline', fontSize: '0.82rem'
-                        }}>Ajouter un contact</button>
+                        Aucun contact. <button onClick={() => openNew('person', company.id)} style={{ background: 'none', border: 'none', color: '#60a5fa', cursor: 'pointer', textDecoration: 'underline', fontSize: '0.82rem' }}>Ajouter un contact</button>
                       </div>
-                    ) : compContacts.map(person => {
-                      const pOpps = getContactOpps(person.id)
-                      const pInts = getContactInteractions(person.id)
-                      return (
-                        <div key={person.id}
-                          onClick={() => setSelectedContact(person)}
-                          style={{
-                            padding: '0.75rem 1.25rem 0.75rem 3rem',
-                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                            borderBottom: '1px solid rgba(255,255,255,0.02)',
-                            cursor: 'pointer', transition: 'background 0.15s'
-                          }}
-                          onMouseEnter={e => e.currentTarget.style.background = 'rgba(96,165,250,0.04)'}
-                          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-                            <div style={{
-                              width: '32px', height: '32px', borderRadius: '50%',
-                              background: 'linear-gradient(135deg, rgba(96,165,250,0.2), rgba(96,165,250,0.1))',
-                              display: 'flex', alignItems: 'center', justifyContent: 'center',
-                              fontSize: '0.7rem', fontWeight: 700, color: '#60a5fa'
-                            }}>{(person.name || '?')[0].toUpperCase()}</div>
-                            <div>
-                              <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#e2e8f0' }}>{person.name}</div>
-                              <div style={{ fontSize: '0.72rem', color: '#4a6370' }}>
-                                {person.position || ''}{person.email ? ' \u00B7 ' + person.email : ''}
-                                {pOpps.length > 0 ? ' \u00B7 ' + pOpps.length + ' opp.' : ''}
-                              </div>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', gap: '0.25rem' }}>
-                            <button onClick={(e) => { e.stopPropagation(); handleDetacher(person) }} style={{
-                              background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.15)',
-                              color: '#f59e0b', width: '28px', height: '28px', borderRadius: '6px',
-                              cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center'
-                            }} title="Detacher de la societe">\u2702\uFE0F</button>
-                            <button onClick={(e) => { e.stopPropagation(); setRattacherContact(person); setRattacherTarget('') }} style={{
-                              background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.15)',
-                              color: '#34d399', width: '28px', height: '28px', borderRadius: '6px',
-                              cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center'
-                            }} title="Deplacer vers une autre societe">\uD83D\uDD17</button>
-                            <button onClick={(e) => { e.stopPropagation(); openEdit(person) }} style={{
-                              background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.15)',
-                              color: '#60a5fa', width: '28px', height: '28px', borderRadius: '6px',
-                              cursor: 'pointer', fontSize: '0.75rem', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center'
-                            }}>\u270F\uFE0F</button>
-                            <button onClick={(e) => { e.stopPropagation(); handleDelete(person.id) }} style={{
-                              background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.15)',
-                              color: '#f87171', width: '28px', height: '28px', borderRadius: '6px',
-                              cursor: 'pointer', fontSize: '0.75rem', display: 'flex',
-                              alignItems: 'center', justifyContent: 'center'
-                            }}>\uD83D\uDDD1\uFE0F</button>
+                    ) : compContacts.map(person => (
+                      <div key={person.id} onClick={() => setSelectedContact(person)} style={{ padding: '0.75rem 1.25rem 0.75rem 3rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid rgba(255,255,255,0.02)', cursor: 'pointer', transition: 'background 0.15s' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(96,165,250,0.04)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                          <div style={{ width: '32px', height: '32px', borderRadius: '50%', background: 'linear-gradient(135deg, rgba(96,165,250,0.2), rgba(96,165,250,0.1))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.7rem', fontWeight: 700, color: '#60a5fa' }}>{(person.name || '?')[0].toUpperCase()}</div>
+                          <div>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#e2e8f0' }}>{person.name}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#4a6370' }}>{person.position || ''}{person.email ? ' · ' + person.email : ''}{getContactOpps(person.id).length > 0 ? ' · ' + getContactOpps(person.id).length + ' opp.' : ''}</div>
                           </div>
                         </div>
-                      )
-                    })}
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button onClick={e => { e.stopPropagation(); handleDetacher(person) }} style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.15)', color: '#f59e0b', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Detacher">✂️</button>
+                          <button onClick={e => { e.stopPropagation(); setRattacherContact(person); setRattacherTarget('') }} style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.15)', color: '#34d399', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Deplacer vers autre societe">🔗</button>
+                          <button onClick={e => { e.stopPropagation(); openEdit(person) }} style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.15)', color: '#60a5fa', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✏️</button>
+                          <button onClick={e => { e.stopPropagation(); handleDelete(person.id) }} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.15)', color: '#f87171', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑️</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
             )
           })}
 
-          {/* Orphan contacts */}
+          {/* Orphans */}
           {filteredOrphans.length > 0 && (
             <div style={{ ...card, overflow: 'hidden', marginTop: '0.5rem' }}>
-              <div style={{
-                padding: '0.75rem 1.25rem', borderLeft: '4px solid #64808b',
-                fontSize: '0.85rem', fontWeight: 600, color: '#8ba5b0'
-              }}>
-                \uD83D\uDC64 Contacts sans societe ({filteredOrphans.length})
-              </div>
+              <div style={{ padding: '0.75rem 1.25rem', borderLeft: '4px solid #64808b', fontSize: '0.85rem', fontWeight: 600, color: '#8ba5b0' }}>👤 Contacts sans societe ({filteredOrphans.length})</div>
               {filteredOrphans.map(person => (
-                <div key={person.id}
-                  onClick={() => setSelectedContact(person)}
-                  style={{
-                    padding: '0.7rem 1.25rem 0.7rem 2.5rem',
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                    borderTop: '1px solid rgba(255,255,255,0.03)',
-                    cursor: 'pointer', transition: 'background 0.15s'
-                  }}
+                <div key={person.id} onClick={() => setSelectedContact(person)} style={{ padding: '0.7rem 1.25rem 0.7rem 2.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.03)', cursor: 'pointer', transition: 'background 0.15s' }}
                   onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
                   onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
                   <div>
                     <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#e2e8f0' }}>{person.name}</div>
-                    <div style={{ fontSize: '0.72rem', color: '#4a6370' }}>
-                      {person.company || 'Pas de societe'}{person.position ? ' \u00B7 ' + person.position : ''}{person.email ? ' \u00B7 ' + person.email : ''}
-                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#4a6370' }}>{person.company || 'Pas de societe'}{person.position ? ' · ' + person.position : ''}{person.email ? ' · ' + person.email : ''}</div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.25rem' }}>
-                    <button onClick={(e) => { e.stopPropagation(); setRattacherContact(person); setRattacherTarget('') }} style={{
-                      background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.15)',
-                      color: '#34d399', width: '28px', height: '28px', borderRadius: '6px',
-                      cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center'
-                    }} title="Rattacher a une societe">\uD83D\uDD17</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleConvert(person) }} style={{
-                      background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.15)',
-                      color: '#a78bfa', width: '28px', height: '28px', borderRadius: '6px',
-                      cursor: 'pointer', fontSize: '0.7rem', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center'
-                    }} title="Convertir en societe">\uD83C\uDFE2</button>
-                    <button onClick={(e) => { e.stopPropagation(); openEdit(person) }} style={{
-                      background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.15)',
-                      color: '#60a5fa', width: '28px', height: '28px', borderRadius: '6px',
-                      cursor: 'pointer', fontSize: '0.75rem', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center'
-                    }}>\u270F\uFE0F</button>
-                    <button onClick={(e) => { e.stopPropagation(); handleDelete(person.id) }} style={{
-                      background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.15)',
-                      color: '#f87171', width: '28px', height: '28px', borderRadius: '6px',
-                      cursor: 'pointer', fontSize: '0.75rem', display: 'flex',
-                      alignItems: 'center', justifyContent: 'center'
-                    }}>\uD83D\uDDD1\uFE0F</button>
+                    <button onClick={e => { e.stopPropagation(); setRattacherContact(person); setRattacherTarget('') }} style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.15)', color: '#34d399', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Rattacher a une societe">🔗</button>
+                    <button onClick={e => { e.stopPropagation(); handleConvert(person) }} style={{ background: 'rgba(167,139,250,0.1)', border: '1px solid rgba(167,139,250,0.15)', color: '#a78bfa', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.7rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Convertir en societe">🏢</button>
+                    <button onClick={e => { e.stopPropagation(); openEdit(person) }} style={{ background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.15)', color: '#60a5fa', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✏️</button>
+                    <button onClick={e => { e.stopPropagation(); handleDelete(person.id) }} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.15)', color: '#f87171', width: '28px', height: '28px', borderRadius: '6px', cursor: 'pointer', fontSize: '0.75rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑️</button>
                   </div>
                 </div>
               ))}
             </div>
           )}
-
           {filteredCompanies.length === 0 && filteredOrphans.length === 0 && (
             <div style={{ ...card, padding: '3rem', textAlign: 'center', color: '#4a6370' }}>Aucun resultat</div>
           )}
         </div>
       </div>
 
-      {/* RIGHT: Detail panel */}
+      {/* Detail panel */}
       {selectedContact && (
         <div style={{ width: '380px', flexShrink: 0, position: 'sticky', top: '80px', maxHeight: 'calc(100vh - 100px)', overflowY: 'auto' }}>
           <div style={{ ...card, padding: '1.5rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem' }}>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-                  <span style={{ fontSize: '1.2rem' }}>{selectedContact.is_company ? '\uD83C\uDFE2' : '\uD83D\uDC64'}</span>
+                  <span style={{ fontSize: '1.2rem' }}>{selectedContact.is_company ? '🏢' : '👤'}</span>
                   <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff' }}>{selectedContact.name}</span>
                 </div>
                 {selectedContact.position && <div style={{ fontSize: '0.82rem', color: '#8ba5b0' }}>{selectedContact.position}</div>}
-                {selectedContact.company && !selectedContact.is_company && <div style={{ fontSize: '0.78rem', color: '#D4AF37' }}>\uD83C\uDFE2 {selectedContact.company}</div>}
+                {selectedContact.company && !selectedContact.is_company && <div style={{ fontSize: '0.78rem', color: '#D4AF37' }}>🏢 {selectedContact.company}</div>}
               </div>
-              <button onClick={() => setSelectedContact(null)} style={{ background: 'none', border: 'none', color: '#4a6370', fontSize: '1.2rem', cursor: 'pointer' }}>\u2715</button>
+              <button onClick={() => setSelectedContact(null)} style={{ background: 'none', border: 'none', color: '#4a6370', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
-              {selectedContact.email && <div style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>\uD83D\uDCE7</span> <a href={'mailto:' + selectedContact.email} style={{ color: '#60a5fa', textDecoration: 'none' }}>{selectedContact.email}</a></div>}
-              {selectedContact.phone && <div style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>\uD83D\uDCDE</span> <a href={'tel:' + selectedContact.phone} style={{ color: '#60a5fa', textDecoration: 'none' }}>{selectedContact.phone}</a></div>}
-              {selectedContact.notes && <div style={{ fontSize: '0.82rem', color: '#4a6370', fontStyle: 'italic', marginTop: '0.25rem' }}>\uD83D\uDCDD {selectedContact.notes}</div>}
+              {selectedContact.email && <div style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📧 <a href={'mailto:' + selectedContact.email} style={{ color: '#60a5fa', textDecoration: 'none' }}>{selectedContact.email}</a></div>}
+              {selectedContact.phone && <div style={{ fontSize: '0.82rem', color: '#94a3b8', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>📞 <a href={'tel:' + selectedContact.phone} style={{ color: '#60a5fa', textDecoration: 'none' }}>{selectedContact.phone}</a></div>}
+              {selectedContact.notes && <div style={{ fontSize: '0.82rem', color: '#4a6370', fontStyle: 'italic', marginTop: '0.25rem' }}>📝 {selectedContact.notes}</div>}
             </div>
             <div style={{ marginBottom: '1.25rem' }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#D4AF37', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>\uD83D\uDCBC Opportunites ({getContactOpps(selectedContact.id).length})</div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#D4AF37', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>💼 Opportunites ({getContactOpps(selectedContact.id).length})</div>
               {getContactOpps(selectedContact.id).length === 0 ? <div style={{ fontSize: '0.78rem', color: '#3a5560' }}>Aucune opportunite</div> : getContactOpps(selectedContact.id).map(opp => (
                 <div key={opp.id} style={{ padding: '0.5rem 0.65rem', marginBottom: '0.3rem', borderRadius: '8px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.04)', fontSize: '0.8rem' }}>
                   <div style={{ fontWeight: 600, color: '#e2e8f0' }}>{opp.name}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#4a6370' }}>{opp.status}{opp.montant ? ' \u00B7 ' + new Intl.NumberFormat('fr-FR').format(opp.montant) + '\u20AC' : ''}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#4a6370' }}>{opp.status}{opp.montant ? ' · ' + new Intl.NumberFormat('fr-FR').format(opp.montant) + '€' : ''}</div>
                 </div>
               ))}
             </div>
             <div>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>\uD83D\uDCDE Interactions ({getContactInteractions(selectedContact.id).length})</div>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#60a5fa', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>📞 Interactions ({getContactInteractions(selectedContact.id).length})</div>
               {getContactInteractions(selectedContact.id).length === 0 ? <div style={{ fontSize: '0.78rem', color: '#3a5560' }}>Aucune interaction</div> : getContactInteractions(selectedContact.id).slice(0, 5).map((int, i) => (
                 <div key={int.id || i} style={{ padding: '0.4rem 0.65rem', marginBottom: '0.25rem', borderRadius: '6px', background: 'rgba(255,255,255,0.02)', fontSize: '0.78rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#8ba5b0' }}>{int.type === 'appel' ? '\uD83D\uDCDE' : int.type === 'email' ? '\uD83D\uDCE7' : int.type === 'reunion' ? '\uD83E\uDD1D' : '\uD83D\uDCDD'} {int.type}</span>
+                    <span style={{ color: '#8ba5b0' }}>{int.type === 'appel' ? '📞' : int.type === 'email' ? '📧' : int.type === 'reunion' ? '🤝' : '📝'} {int.type}</span>
                     <span style={{ color: '#3a5560', fontSize: '0.68rem' }}>{new Date(int.created_at).toLocaleDateString('fr-FR')}</span>
                   </div>
                   {int.notes && <div style={{ color: '#4a6370', fontSize: '0.75rem', marginTop: '0.15rem' }}>{int.notes}</div>}
@@ -508,31 +328,20 @@ export default function Contacts() {
               ))}
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
-              <button onClick={() => openEdit(selectedContact)} style={{ flex: 1, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>\u270F\uFE0F Modifier</button>
-              <button onClick={() => { setRattacherContact(selectedContact); setRattacherTarget('') }} style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)', color: '#34d399', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>\uD83D\uDD17</button>
-              <button onClick={() => handleDelete(selectedContact.id)} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>\uD83D\uDDD1\uFE0F</button>
+              <button onClick={() => openEdit(selectedContact)} style={{ flex: 1, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>✏️ Modifier</button>
+              <button onClick={() => { setRattacherContact(selectedContact); setRattacherTarget('') }} style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)', color: '#34d399', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>🔗</button>
+              <button onClick={() => handleDelete(selectedContact.id)} style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>🗑️</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL RATTACHER */}
+      {/* Modal Rattacher */}
       {rattacherContact && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1100, padding: '1rem', backdropFilter: 'blur(4px)'
-        }} onClick={() => setRattacherContact(null)}>
-          <div style={{
-            ...card, width: '100%', maxWidth: '420px', padding: '2rem',
-            boxShadow: '0 24px 64px rgba(0,0,0,0.4)'
-          }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', margin: '0 0 0.5rem' }}>
-              \uD83D\uDD17 Rattacher {rattacherContact.name}
-            </h3>
-            <p style={{ fontSize: '0.82rem', color: '#8ba5b0', marginBottom: '1.25rem' }}>
-              Choisissez la societe dans laquelle deplacer ce contact :
-            </p>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setRattacherContact(null)}>
+          <div style={{ ...card, width: '100%', maxWidth: '420px', padding: '2rem', boxShadow: '0 24px 64px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ fontSize: '1.1rem', fontWeight: 700, color: '#fff', margin: '0 0 0.5rem' }}>🔗 Rattacher {rattacherContact.name}</h3>
+            <p style={{ fontSize: '0.82rem', color: '#8ba5b0', marginBottom: '1.25rem' }}>Choisissez la societe dans laquelle deplacer ce contact :</p>
             <select value={rattacherTarget} onChange={e => setRattacherTarget(e.target.value)} style={inputStyle}>
               <option value="">-- Choisir une societe --</option>
               {companies.filter(c => c.id !== rattacherContact.id).map(c => (
@@ -540,51 +349,25 @@ export default function Contacts() {
               ))}
             </select>
             <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '1.5rem' }}>
-              <button onClick={() => setRattacherContact(null)} style={{
-                background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)',
-                color: '#8ba5b0', padding: '0.6rem 1.4rem', borderRadius: '8px', fontSize: '0.88rem', cursor: 'pointer'
-              }}>Annuler</button>
-              <button onClick={handleRattacher} disabled={!rattacherTarget} style={{
-                background: rattacherTarget ? 'linear-gradient(135deg, #34d399, #059669)' : 'rgba(52,211,153,0.3)',
-                border: 'none', color: '#fff', padding: '0.6rem 1.8rem', borderRadius: '8px',
-                fontWeight: 700, fontSize: '0.88rem', cursor: rattacherTarget ? 'pointer' : 'default'
-              }}>\uD83D\uDD17 Rattacher</button>
+              <button onClick={() => setRattacherContact(null)} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#8ba5b0', padding: '0.6rem 1.4rem', borderRadius: '8px', fontSize: '0.88rem', cursor: 'pointer' }}>Annuler</button>
+              <button onClick={handleRattacher} disabled={!rattacherTarget} style={{ background: rattacherTarget ? 'linear-gradient(135deg, #34d399, #059669)' : 'rgba(52,211,153,0.3)', border: 'none', color: '#fff', padding: '0.6rem 1.8rem', borderRadius: '8px', fontWeight: 700, fontSize: '0.88rem', cursor: rattacherTarget ? 'pointer' : 'default' }}>🔗 Rattacher</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL FORMULAIRE */}
+      {/* Modal Formulaire */}
       {showModal && (
-        <div style={{
-          position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)'
-        }} onClick={() => setShowModal(false)}>
-          <div style={{
-            ...card, width: '100%', maxWidth: '500px', maxHeight: '90vh',
-            overflowY: 'auto', padding: '2rem', boxShadow: '0 24px 64px rgba(0,0,0,0.4)'
-          }} onClick={e => e.stopPropagation()}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setShowModal(false)}>
+          <div style={{ ...card, width: '100%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto', padding: '2rem', boxShadow: '0 24px 64px rgba(0,0,0,0.4)' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff', margin: 0 }}>
-                {editingContact ? '\u270F\uFE0F Modifier' : formType === 'company' ? '\uD83C\uDFE2 Nouvelle societe' : '\uD83D\uDC64 Nouveau contact'}
-              </h3>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#fff', margin: 0 }}>{editingContact ? '✏️ Modifier' : formType === 'company' ? '🏢 Nouvelle societe' : '👤 Nouveau contact'}</h3>
               <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', color: '#64808b', fontSize: '1.4rem', cursor: 'pointer' }}>x</button>
             </div>
             {!editingContact && (
               <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.25rem' }}>
-                <button onClick={() => { setFormType('company'); setFormData(prev => ({ ...prev, is_company: true })) }} style={{
-                  flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                  background: formType === 'company' ? 'rgba(212,175,55,0.15)' : 'rgba(255,255,255,0.05)',
-                  color: formType === 'company' ? '#D4AF37' : '#64808b',
-                  fontWeight: formType === 'company' ? 600 : 400, fontSize: '0.85rem'
-                }}>\uD83C\uDFE2 Societe</button>
-                <button onClick={() => { setFormType('person'); setFormData(prev => ({ ...prev, is_company: false })) }} style={{
-                  flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', cursor: 'pointer',
-                  background: formType === 'person' ? 'rgba(96,165,250,0.15)' : 'rgba(255,255,255,0.05)',
-                  color: formType === 'person' ? '#60a5fa' : '#64808b',
-                  fontWeight: formType === 'person' ? 600 : 400, fontSize: '0.85rem'
-                }}>\uD83D\uDC64 Personne</button>
+                <button onClick={() => { setFormType('company'); setFormData(prev => ({ ...prev, is_company: true })) }} style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', cursor: 'pointer', background: formType === 'company' ? 'rgba(212,175,55,0.15)' : 'rgba(255,255,255,0.05)', color: formType === 'company' ? '#D4AF37' : '#64808b', fontWeight: formType === 'company' ? 600 : 400, fontSize: '0.85rem' }}>🏢 Societe</button>
+                <button onClick={() => { setFormType('person'); setFormData(prev => ({ ...prev, is_company: false })) }} style={{ flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none', cursor: 'pointer', background: formType === 'person' ? 'rgba(96,165,250,0.15)' : 'rgba(255,255,255,0.05)', color: formType === 'person' ? '#60a5fa' : '#64808b', fontWeight: formType === 'person' ? 600 : 400, fontSize: '0.85rem' }}>👤 Personne</button>
               </div>
             )}
             <form onSubmit={handleSubmit}>
@@ -627,14 +410,5 @@ export default function Contacts() {
   )
 }
 
-const labelStyle = {
-  display: 'block', color: '#8ba5b0', fontSize: '0.78rem',
-  fontWeight: 500, marginBottom: '0.3rem', letterSpacing: '0.03em', textTransform: 'uppercase'
-}
-
-const inputStyle = {
-  width: '100%', padding: '0.65rem 0.9rem',
-  background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
-  borderRadius: '8px', color: '#e2e8f0', fontSize: '0.9rem',
-  outline: 'none', boxSizing: 'border-box'
-}
+const labelStyle = { display: 'block', color: '#8ba5b0', fontSize: '0.78rem', fontWeight: 500, marginBottom: '0.3rem', letterSpacing: '0.03em', textTransform: 'uppercase' }
+const inputStyle = { width: '100%', padding: '0.65rem 0.9rem', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#e2e8f0', fontSize: '0.9rem', outline: 'none', boxSizing: 'border-box' }
