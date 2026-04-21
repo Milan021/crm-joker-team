@@ -15,6 +15,7 @@ import MFASetup from './components/MFASetup'
 import IntercontratTracker from './components/IntercontratTracker'
 import AuditClient from './components/AuditClient'
 import CopilotCommercial from './components/CopilotCommercial'
+import ProjectManager from './components/ProjectManager'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
@@ -27,12 +28,14 @@ const TABS = [
   { id: 'veille', icon: '🔍', label: 'Veille' },
   { id: 'content', icon: '✍️', label: 'Contenu' },
   { id: 'matching', icon: '🤖', label: 'Matching IA' },
-  { id: 'config', icon: '⚙️', label: 'Paramètres' }
+  { id: 'config', icon: '⚙️', label: 'Paramètres' },
+  { id: 'projet', icon: '📋', label: 'Projet' },
 ]
 
 export default function App() {
   const [user, setUser] = useState(null)
   const [activeTab, setActiveTab] = useState('dashboard')
+  
   const [menuOpen, setMenuOpen] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [mfaVerified, setMfaVerified] = useState(false)
@@ -254,6 +257,7 @@ export default function App() {
           {activeTab === 'content' && <ContentGenerator />}
           {activeTab === 'matching' && <Matching />}
           {activeTab === 'config' && <VeilleConfig />}
+          {activeTab === 'projet' && <ProjectManager />}
         </div>
       </main>
 
