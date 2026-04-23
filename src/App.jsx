@@ -16,6 +16,7 @@ import IntercontratTracker from './components/IntercontratTracker'
 import AuditClient from './components/AuditClient'
 import CopilotCommercial from './components/CopilotCommercial'
 import ProjectManager from './components/ProjectManager'
+import ProspectionAgent from './components/ProspectionAgent'
 
 const TABS = [
   { id: 'dashboard', icon: '📊', label: 'Dashboard' },
@@ -30,7 +31,7 @@ const TABS = [
   { id: 'matching', icon: '🤖', label: 'Matching IA' },
   { id: 'config', icon: '⚙️', label: 'Paramètres' },
   { id: 'projet', icon: '📋', label: 'Projet' },
-]
+  { id: 'prospection', icon: '🎯', label: 'Prospection' },
 
 export default function App() {
   const [user, setUser] = useState(null)
@@ -258,6 +259,8 @@ export default function App() {
           {activeTab === 'matching' && <Matching />}
           {activeTab === 'config' && <VeilleConfig />}
           {activeTab === 'projet' && <ProjectManager />}
+          {activeTab === 'prospection' && <ProspectionAgent />}
+
         </div>
       </main>
 
