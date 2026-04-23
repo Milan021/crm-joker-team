@@ -32,6 +32,7 @@ const TABS = [
   { id: 'config', icon: '⚙️', label: 'Paramètres' },
   { id: 'projet', icon: '📋', label: 'Projet' },
   { id: 'prospection', icon: '🎯', label: 'Prospection' },
+]
 
 export default function App() {
   const [user, setUser] = useState(null)
