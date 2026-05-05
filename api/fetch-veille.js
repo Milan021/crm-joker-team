@@ -1,174 +1,153 @@
 // API Vercel : /api/fetch-veille.js
-// 10 sources d'actualités IT françaises
+// Recupere les actualites IT depuis 20 sources RSS francaises
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (req.method === 'OPTIONS') return res.status(200).end()
 
   try {
-    const keywords = req.query.keywords
-      ? req.query.keywords.split(',').map(k => k.trim())
-      : ['mainframe', 'COBOL', 'ESN', 'DSI', 'cloud', 'cybersécurité', 'freelance']
+    const keywords = (req.query.keywords || 'mainframe,COBOL,DSI,cloud,ESN,IA').split(',').map(k => k.trim().toLowerCase())
 
     const SOURCES = [
-      { name: 'Le Monde Informatique', icon: '🌐', color: '#2563eb', rss: 'https://www.lemondeinformatique.fr/flux-rss/thematique/toutes-les-actualites/rss.xml' },
-      { name: 'InformatiqueNews', icon: '💻', color: '#60a5fa', rss: 'https://www.informatiquenews.fr/feed' },
-      { name: 'Silicon.fr', icon: '🔬', color: '#ec4899', rss: 'https://www.silicon.fr/feed' },
-      { name: 'LeMagIT', icon: '📰', color: '#f59e0b', rss: 'https://www.lemagit.fr/rss/ContentSyndication.xml' },
-      { name: 'Alliancy', icon: '🏢', color: '#34d399', rss: 'https://www.alliancy.fr/feed' },
-      { name: 'Next.ink', icon: '⚡', color: '#8b5cf6', rss: 'https://next.ink/feed/' },
-      { name: 'Clubic', icon: '🖥️', color: '#ef4444', rss: 'https://www.clubic.com/feed/news.rss' },
-      { name: "Tom's Hardware FR", icon: '🔧', color: '#f97316', rss: 'https://www.tomshardware.fr/feed/' },
-      { name: 'Free-Work IT', icon: '👨‍💻', color: '#06b6d4', rss: 'https://www.free-work.com/fr/tech-it/blog/feed' },
-      { name: 'ZDNet France', icon: '📱', color: '#dc2626', rss: 'https://www.zdnet.fr/feeds/rss/actualites/' }
+      { name: 'Le Monde Informatique', url: 'https://www.lemondeinformatique.fr/flux-rss/rss.xml' },
+      { name: 'InformatiqueNews', url: 'https://www.informatiquenews.fr/feed' },
+      { name: 'Silicon.fr', url: 'https://www.silicon.fr/feed' },
+      { name: 'LeMagIT', url: 'https://www.lemagit.fr/rss/ContentSyndication.xml' },
+      { name: 'Alliancy', url: 'https://www.alliancy.fr/feed' },
+      { name: 'Next.ink', url: 'https://next.ink/feed/rss2' },
+      { name: 'Clubic', url: 'https://www.clubic.com/feed/news.rss' },
+      { name: "Tom's Hardware FR", url: 'https://www.tomshardware.fr/feed/' },
+      { name: 'Free-Work IT', url: 'https://www.free-work.com/fr/tech-it/blog/feed' },
+      { name: 'ZDNet France', url: 'https://www.zdnet.fr/feeds/rss/actualites.xml' },
+      { name: 'Planet Mainframe', url: 'https://planetmainframe.com/feed/' },
+      { name: 'IT-Connect', url: 'https://www.it-connect.fr/feed/' },
+      { name: 'La Revue du Digital', url: 'https://www.larevuedudigital.com/feed/' },
+      { name: 'Techniques Ingenieur', url: 'https://www.techniques-ingenieur.fr/actualite/informatique-numerique/feed/' },
+      { name: 'Numerama', url: 'https://www.numerama.com/feed/' },
+      { name: 'Journal du Net', url: 'https://www.journaldunet.com/rss/' },
+      { name: '01net', url: 'https://www.01net.com/rss/info/flux-rss/flux-toutes-les-actualites/' },
+      { name: 'CNIL', url: 'https://www.cnil.fr/fr/rss.xml' },
+      { name: "L'Usine Digitale", url: 'https://www.usine-digitale.fr/rss' },
+      { name: 'GreenIT', url: 'https://www.greenit.fr/feed/' },
     ]
 
     const allItems = []
-
-    // Fetch each RSS source
-    for (const source of SOURCES) {
+    const fetchPromises = SOURCES.map(async (source) => {
       try {
-        const resp = await fetch(source.rss, {
-          headers: { 'User-Agent': 'Mozilla/5.0 CRM-JokerTeam/2.0' },
-          signal: AbortSignal.timeout(8000)
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 8000)
+        const resp = await fetch(source.url, {
+          signal: controller.signal,
+          headers: { 'User-Agent': 'CRM-Joker-Team-Veille/1.0' }
         })
-        if (!resp.ok) continue
-
+        clearTimeout(timeout)
+        if (!resp.ok) return
         const xml = await resp.text()
-        const items = parseRssXml(xml)
+        const items = parseRSS(xml, source.name)
+        allItems.push(...items)
+      } catch (e) { /* source indisponible */ }
+    })
 
-        items.slice(0, 10).forEach(item => {
-          const title = cleanHtml(item.title)
-          const desc = cleanHtml(item.description || '')
-          const text = (title + ' ' + desc).toLowerCase()
+    await Promise.all(fetchPromises)
 
-          // Keyword matching
-          const matchedKeywords = keywords.filter(kw => text.includes(kw.toLowerCase()))
-          const relevance = matchedKeywords.length > 0
-            ? Math.min(95, 50 + matchedKeywords.length * 15)
-            : 30
-
-          allItems.push({
-            title,
-            description: desc.slice(0, 350),
-            url: item.link,
-            source: source.name,
-            source_icon: source.icon,
-            source_color: source.color,
-            published_at: parseDate(item.pubDate),
-            keywords: matchedKeywords.length > 0 ? matchedKeywords : [detectCategory(title, desc)],
-            type: detectType(title, desc),
-            relevance_score: relevance
-          })
-        })
-      } catch (e) {
-        console.log(`RSS failed for ${source.name}:`, e.message)
+    const scored = allItems.map(item => {
+      const text = `${item.title} ${item.description}`.toLowerCase()
+      let score = 0
+      const matchedKeywords = []
+      for (const kw of keywords) {
+        if (text.includes(kw)) { score += 20; matchedKeywords.push(kw) }
       }
-    }
+      if (item.published_at) {
+        const hoursAgo = (Date.now() - new Date(item.published_at).getTime()) / 3600000
+        if (hoursAgo < 6) score += 30
+        else if (hoursAgo < 24) score += 20
+        else if (hoursAgo < 72) score += 10
+      }
+      return { ...item, relevance_score: Math.min(score, 100), keywords: matchedKeywords }
+    })
 
-    // Google News as fallback for keyword-specific results
-    for (const keyword of keywords.slice(0, 3)) {
-      try {
-        const q = encodeURIComponent(`${keyword} informatique France`)
-        const resp = await fetch(`https://news.google.com/rss/search?q=${q}&hl=fr&gl=FR&ceid=FR:fr`, {
-          headers: { 'User-Agent': 'Mozilla/5.0 CRM-JokerTeam/2.0' },
-          signal: AbortSignal.timeout(8000)
-        })
-        if (!resp.ok) continue
-        const xml = await resp.text()
-        const items = parseRssXml(xml)
-        items.slice(0, 3).forEach(item => {
-          allItems.push({
-            title: cleanHtml(item.title),
-            description: cleanHtml(item.description || '').slice(0, 350),
-            url: item.link,
-            source: item.source || 'Google News',
-            source_icon: '🌐',
-            source_color: '#94a3b8',
-            published_at: parseDate(item.pubDate),
-            keywords: [keyword],
-            type: 'news',
-            relevance_score: 60
-          })
-        })
-      } catch (e) {}
-    }
+    scored.sort((a, b) => {
+      if (b.relevance_score !== a.relevance_score) return b.relevance_score - a.relevance_score
+      return new Date(b.published_at || 0) - new Date(a.published_at || 0)
+    })
 
-    // Deduplicate
     const seen = new Set()
-    const unique = allItems.filter(item => {
-      const key = item.title.toLowerCase().slice(0, 50)
-      if (seen.has(key)) return false
+    const unique = scored.filter(item => {
+      const key = item.title?.toLowerCase().slice(0, 50)
+      if (!key || seen.has(key)) return false
       seen.add(key)
       return true
     })
 
-    // Sort: relevance then date
-    unique.sort((a, b) => {
-      if (b.relevance_score !== a.relevance_score) return b.relevance_score - a.relevance_score
-      return new Date(b.published_at) - new Date(a.published_at)
-    })
-
     res.status(200).json({
       success: true,
-      count: unique.length,
+      items: unique.slice(0, 100),
       sources_count: SOURCES.length,
-      fetched_at: new Date().toISOString(),
-      items: unique.slice(0, 50)
+      total_found: allItems.length
     })
   } catch (error) {
-    console.error('Veille error:', error)
+    console.error('Fetch veille error:', error)
     res.status(500).json({ error: error.message })
   }
 }
 
-function parseRssXml(xml) {
+function parseRSS(xml, sourceName) {
   const items = []
-  const re = /<item>([\s\S]*?)<\/item>/gi
-  let m
-  while ((m = re.exec(xml)) !== null) {
-    const b = m[1]
-    items.push({
-      title: extractTag(b, 'title'),
-      link: extractTag(b, 'link'),
-      description: extractTag(b, 'description'),
-      pubDate: extractTag(b, 'pubDate'),
-      source: extractTag(b, 'source') || extractTag(b, 'dc:creator')
-    })
-  }
-  return items
+  try {
+    const itemRegex = /<item[\s>]([\s\S]*?)<\/item>|<entry[\s>]([\s\S]*?)<\/entry>/gi
+    let match
+    while ((match = itemRegex.exec(xml)) !== null) {
+      const block = match[1] || match[2]
+      const title = extractTag(block, 'title')
+      if (!title) continue
+      const link = extractLink(block)
+      const description = cleanHTML(extractTag(block, 'description') || extractTag(block, 'summary') || extractTag(block, 'content') || '')
+      const pubDate = extractTag(block, 'pubDate') || extractTag(block, 'published') || extractTag(block, 'updated') || extractTag(block, 'dc:date')
+      let published_at = null
+      if (pubDate) { try { published_at = new Date(pubDate).toISOString() } catch {} }
+      let type = 'news'
+      const textLower = `${title} ${description}`.toLowerCase()
+      if (textLower.includes('emploi') || textLower.includes('recrutement') || textLower.includes('recrute')) type = 'job'
+      if (textLower.includes('nomm') || textLower.includes('nomination') || textLower.includes('promu')) type = 'nomination'
+      items.push({
+        type, title: cleanHTML(title).slice(0, 200), description: description.slice(0, 500),
+        url: link, source: sourceName, published_at, keywords: []
+      })
+    }
+  } catch (e) {}
+  return items.slice(0, 15)
 }
 
-function extractTag(xml, tag) {
-  const re = new RegExp(`<${tag}[^>]*>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`, 'is')
-  const m = re.exec(xml)
-  return m ? m[1].trim() : ''
+function extractTag(block, tag) {
+  const cdataRegex = new RegExp(`<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*<\\/${tag}>`, 'i')
+  const cdataMatch = block.match(cdataRegex)
+  if (cdataMatch) return cdataMatch[1].trim()
+  const regex = new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'i')
+  const match = block.match(regex)
+  return match ? match[1].trim() : ''
 }
 
-function cleanHtml(s) {
-  return s.replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim()
+function extractLink(block) {
+  const linkTag = block.match(/<link[^>]*>([^<]+)<\/link>/i)
+  if (linkTag) return linkTag[1].trim()
+  const linkHref = block.match(/<link[^>]*href=["']([^"']+)["'][^>]*\/?>/i)
+  if (linkHref) return linkHref[1].trim()
+  const guid = block.match(/<guid[^>]*>([^<]+)<\/guid>/i)
+  if (guid && guid[1].startsWith('http')) return guid[1].trim()
+  return ''
 }
 
-function parseDate(d) {
-  try { return new Date(d).toISOString() } catch { return new Date().toISOString() }
-}
-
-function detectType(t, d) {
-  const x = (t + ' ' + d).toLowerCase()
-  if (x.match(/recrut|emploi|poste |cdi |freelance|offre d/)) return 'job'
-  if (x.match(/nomm|rejoint|promu|nomination/)) return 'nomination'
-  return 'news'
-}
-
-function detectCategory(t, d) {
-  const x = (t + ' ' + d).toLowerCase()
-  if (x.match(/\bia\b|intelligence artificielle|machine learning|llm|chatgpt|gemini|copilot/)) return 'IA'
-  if (x.match(/cloud|aws|azure|saas/)) return 'Cloud'
-  if (x.match(/cyber|sécurité|ransomware|phishing/)) return 'Cybersécurité'
-  if (x.match(/mainframe|cobol|legacy/)) return 'Mainframe'
-  if (x.match(/data|donnée/)) return 'Data'
-  if (x.match(/dsi|transformation|digital/)) return 'DSI'
-  return 'IT'
+function cleanHTML(text) {
+  return text
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#039;/g, "'").replace(/&rsquo;/g, "'")
+    .replace(/&lsquo;/g, "'").replace(/&ldquo;/g, '"').replace(/&rdquo;/g, '"')
+    .replace(/&nbsp;/g, ' ').replace(/&eacute;/g, 'e').replace(/&egrave;/g, 'e')
+    .replace(/&agrave;/g, 'a').replace(/&ecirc;/g, 'e').replace(/&ocirc;/g, 'o')
+    .replace(/&ucirc;/g, 'u').replace(/&iuml;/g, 'i').replace(/&ccedil;/g, 'c')
+    .replace(/&hellip;/g, '...').replace(/\s+/g, ' ').trim()
 }
