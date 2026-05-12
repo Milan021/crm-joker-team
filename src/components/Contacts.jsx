@@ -328,6 +328,12 @@ export default function Contacts() {
                 </div>
               ))}
             </div>
+
+            {/* Calendrier de suivi */}
+            <div style={{ marginBottom: '1.25rem', marginTop: '1.25rem' }}>
+              <ContactCalendar contactId={selectedContact.id} contactName={selectedContact.name} />
+            </div>
+
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
               <button onClick={() => openEdit(selectedContact)} style={{ flex: 1, background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)', color: '#60a5fa', padding: '0.5rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>✏️ Modifier</button>
               <button onClick={() => { setRattacherContact(selectedContact); setRattacherTarget('') }} style={{ background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)', color: '#34d399', padding: '0.5rem 1rem', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontWeight: 600 }}>🔗</button>
@@ -336,10 +342,7 @@ export default function Contacts() {
           </div>
         </div>
       )}
-{/* Calendrier de suivi */}
-            <div style={{ marginBottom: '1.25rem' }}>
-              <ContactCalendar contactId={selectedContact.id} contactName={selectedContact.name} />
-            </div>}
+
       {/* Modal Rattacher */}
       {rattacherContact && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setRattacherContact(null)}>
