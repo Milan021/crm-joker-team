@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import ContactCalendar from './ContactCalendar'
 
 export default function Contacts() {
   const [contacts, setContacts] = useState([])
@@ -335,7 +336,10 @@ export default function Contacts() {
           </div>
         </div>
       )}
-
+{/* Calendrier de suivi */}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <ContactCalendar contactId={selectedContact.id} contactName={selectedContact.name} />
+            </div>}
       {/* Modal Rattacher */}
       {rattacherContact && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1100, padding: '1rem', backdropFilter: 'blur(4px)' }} onClick={() => setRattacherContact(null)}>
