@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
+import FinanceDashboard from './FinanceDashboard'
 
 export default function Dashboard({ onNavigate }) {
   const [contacts, setContacts] = useState([])
