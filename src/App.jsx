@@ -87,7 +87,7 @@ export default function App() {
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f1f5f9' }}>
+    <div style={{ minHeight: '100vh', background: '#0a1a21' }}>
       {showSearch && (
         <GlobalSearch
           onNavigate={(tab) => switchTab(tab)}
@@ -158,8 +158,8 @@ export default function App() {
       {/* DESKTOP NAV */}
       {!isMobile && (
         <nav style={{
-          background: '#fff', borderBottom: '1px solid #e2e8f0',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.04)',
+          background: '#122a33', borderBottom: '1px solid rgba(255,255,255,0.06)',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.2)',
           position: 'sticky', top: 0, zIndex: 200
         }}>
           <div style={{
