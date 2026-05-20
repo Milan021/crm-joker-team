@@ -7,12 +7,10 @@ import Opportunites from './components/Opportunites'
 import Candidats from './components/Candidats'
 import Veille from './components/Veille'
 import VeilleConfig from './components/VeilleConfig'
-import Matching from './components/Matching'
 import GlobalSearch from './components/GlobalSearch'
 import ChatBot from './components/ChatBot'
 import ContentGenerator from './components/ContentGenerator'
 import MFASetup from './components/MFASetup'
-import IntercontratTracker from './components/IntercontratTracker'
 import AuditClient from './components/AuditClient'
 import CopilotCommercial from './components/CopilotCommercial'
 import ProjectManager from './components/ProjectManager'
@@ -24,11 +22,9 @@ const TABS = [
   { id: 'copilot', icon: '🧠', label: 'Copilot IA' },
   { id: 'opportunites', icon: '💼', label: 'Opportunités' },
   { id: 'candidats', icon: '👔', label: 'Candidats' },
-  { id: 'intercontrat', icon: '⏰', label: 'Intercontrat' },
   { id: 'audit', icon: '🏦', label: 'Audit Client' },
   { id: 'veille', icon: '🔍', label: 'Veille' },
   { id: 'content', icon: '✍️', label: 'Contenu' },
-  { id: 'matching', icon: '🤖', label: 'Matching IA' },
   { id: 'config', icon: '⚙️', label: 'Paramètres' },
   { id: 'projet', icon: '📋', label: 'Projet' },
   { id: 'prospection', icon: '🎯', label: 'Prospection' },
@@ -253,11 +249,9 @@ export default function App() {
           {activeTab === 'copilot' && <CopilotCommercial />}
           {activeTab === 'opportunites' && <Opportunites />}
           {activeTab === 'candidats' && <Candidats />}
-          {activeTab === 'intercontrat' && <IntercontratTracker />}
           {activeTab === 'audit' && <AuditClient />}
           {activeTab === 'veille' && <Veille />}
           {activeTab === 'content' && <ContentGenerator />}
-          {activeTab === 'matching' && <Matching />}
           {activeTab === 'config' && <VeilleConfig />}
           {activeTab === 'projet' && <ProjectManager />}
           {activeTab === 'prospection' && <ProspectionAgent />}
