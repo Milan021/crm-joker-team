@@ -50,6 +50,7 @@ export default function ProspectionAgent() {
   const [signals, setSignals] = useState(null)
   const [signalsLoading, setSignalsLoading] = useState(false)
   const [detailTab, setDetailTab] = useState('scoring')
+  const [interlocuteurs, setInterlocuteurs] = useState([])
 
   async function handleSearch(e) {
     e?.preventDefault()
@@ -83,6 +84,7 @@ export default function ProspectionAgent() {
       if (resp.ok) {
         const data = await resp.json()
         setSignals(data)
+        setInterlocuteurs(data.interlocuteurs || [])
       }
     } catch (err) { console.error(err) }
     setSignalsLoading(false)
@@ -94,6 +96,7 @@ export default function ProspectionAgent() {
     setMessage(null)
     setSignals(null)
     setDetailTab('scoring')
+    setInterlocuteurs([])
     setScoringLoading(true)
     try {
       const resp = await fetch('/api/prospect', {
@@ -403,6 +406,53 @@ export default function ProspectionAgent() {
                       }}>
                         {signals.heatLevel}
                       </div>
+
+                      {/* Interlocuteurs identifiés */}
+                      {interlocuteurs.length > 0 && (
+                        <div style={{ marginBottom: '1.25rem' }}>
+                          <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64808b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.5rem' }}>
+                            👤 Interlocuteurs identifiés
+                          </div>
+                          {interlocuteurs.map((p, i) => (
+                            <div key={i} style={{
+                              display: 'flex', alignItems: 'flex-start', gap: '0.6rem',
+                              padding: '0.6rem 0.75rem', borderRadius: '8px', marginBottom: '0.3rem',
+                              background: p.priorite === 'haute' ? 'rgba(212,175,55,0.07)' : 'rgba(255,255,255,0.03)',
+                              border: `1px solid ${p.priorite === 'haute' ? 'rgba(212,175,55,0.2)' : 'rgba(255,255,255,0.06)'}`
+                            }}>
+                              <div style={{
+                                width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                                background: p.priorite === 'haute' ? 'rgba(212,175,55,0.15)' : 'rgba(96,165,250,0.1)',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.75rem', fontWeight: 700,
+                                color: p.priorite === 'haute' ? '#D4AF37' : '#60a5fa'
+                              }}>
+                                {p.nom.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f1f5f9' }}>{p.nom}</span>
+                                  {p.priorite === 'haute' && (
+                                    <span style={{ fontSize: '0.6rem', padding: '0.1rem 0.35rem', borderRadius: '4px', background: 'rgba(212,175,55,0.15)', color: '#D4AF37', fontWeight: 600 }}>Prioritaire</span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '0.75rem', color: '#60a5fa', marginBottom: '0.1rem' }}>{p.poste}</div>
+                                <div style={{ fontSize: '0.7rem', color: '#4a6370', fontStyle: 'italic' }}>{p.contexte}</div>
+                              </div>
+                              <a href={`https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(p.nom)}`}
+                                target="_blank" rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                style={{
+                                  flexShrink: 0, padding: '0.25rem 0.5rem', borderRadius: '5px', fontSize: '0.65rem',
+                                  background: 'rgba(96,165,250,0.1)', border: '1px solid rgba(96,165,250,0.2)',
+                                  color: '#60a5fa', textDecoration: 'none', fontWeight: 600, whiteSpace: 'nowrap'
+                                }}>
+                                🔗 LinkedIn
+                              </a>
+                            </div>
+                          ))}
+                        </div>
+                      )}
 
                       {/* Groupes de signaux */}
                       {['levee_fonds', 'linkedin', 'linkedin_search', 'emploi', 'indeed_search', 'actualite'].map(type => {

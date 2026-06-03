@@ -186,7 +186,94 @@ export default async function handler(req, res) {
       const totalHeat = signals.reduce((acc, s) => acc + (s.heat || 0), 0)
       const heatLevel = totalHeat >= 6 ? 'Très chaud 🔥🔥' : totalHeat >= 3 ? 'Chaud 🔥' : totalHeat >= 1 ? 'Tiède 🌡️' : 'Froid ❄️'
 
-      return res.status(200).json({ success: true, signals, heatLevel, totalHeat })
+      // Analyse IA : extraction des interlocuteurs par signal
+      let interlocuteurs = []
+      const signalsWithContent = signals.filter(s => s.heat > 0 && s.title)
+      if (signalsWithContent.length > 0 && ANTHROPIC_KEY) {
+        try {
+          const titlesText = signalsWithContent.map((s, i) =>
+            `[${i + 1}] (${s.label}) ${s.title}`
+          ).join('\n')
+
+          const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': ANTHROPIC_KEY,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model: 'claude-sonnet-4-20250514',
+              max_tokens: 800,
+              system: `Tu es un expert en prospection B2B. 
+On te donne des titres d'articles/signaux liés à une entreprise.
+Extrait TOUS les interlocuteurs mentionnés (personnes réelles avec un nom) et leur poste/rôle.
+Aussi, pour chaque signal, identifie le contexte clé (levée de fonds, recrutement, transformation digitale, etc).
+
+Réponds UNIQUEMENT en JSON valide, sans markdown :
+{
+  "interlocuteurs": [
+    {
+      "nom": "Prénom Nom",
+      "poste": "Titre/Position",
+      "contexte": "Pourquoi il/elle apparaît",
+      "signal_index": 1,
+      "priorite": "haute|moyenne|faible"
+    }
+  ],
+  "contexte_global": "Résumé en 1 phrase du contexte de prospection"
+}
+
+Si aucun interlocuteur nommé n'est trouvé, retourne {"interlocuteurs": [], "contexte_global": "Aucun interlocuteur identifié dans les signaux récents."}`,
+              messages: [{
+                role: 'user',
+                content: `Entreprise : ${nom}\nDirigeants connus : ${dirigeants.map(d => `${d.nom} (${d.qualite})`).join(', ') || 'aucun'}\n\nSignaux détectés :\n${titlesText}`
+              }]
+            })
+          })
+
+          if (aiResp.ok) {
+            const aiData = await aiResp.json()
+            let aiContent = aiData.content?.[0]?.text || '{}'
+            aiContent = aiContent.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
+            const parsed = JSON.parse(aiContent)
+            interlocuteurs = parsed.interlocuteurs || []
+            // Attacher contexte_global au premier signal pour l'affichage
+            if (parsed.contexte_global) {
+              signals.unshift({
+                type: 'contexte_ia',
+                icon: '🤖',
+                label: 'Analyse IA',
+                title: parsed.contexte_global,
+                link: '',
+                date: '',
+                source: 'Claude AI',
+                heat: 0
+              })
+            }
+          }
+        } catch (e) {
+          console.error('Interlocuteurs IA error:', e)
+        }
+      }
+
+      // Fusionner les dirigeants connus comme interlocuteurs de base s'ils ne sont pas déjà détectés
+      for (const d of dirigeants) {
+        const alreadyFound = interlocuteurs.some(i =>
+          i.nom.toLowerCase().includes(d.nom.split(' ')[0]?.toLowerCase())
+        )
+        if (!alreadyFound && d.nom) {
+          interlocuteurs.push({
+            nom: d.nom,
+            poste: d.qualite || 'Dirigeant',
+            contexte: 'Dirigeant enregistré au registre des entreprises',
+            signal_index: null,
+            priorite: 'haute'
+          })
+        }
+      }
+
+      return res.status(200).json({ success: true, signals, heatLevel, totalHeat, interlocuteurs })
     }
 
     // ACTION 2: Score a prospect
