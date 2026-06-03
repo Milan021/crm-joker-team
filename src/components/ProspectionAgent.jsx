@@ -47,6 +47,9 @@ export default function ProspectionAgent() {
   const [tone, setTone] = useState('direct')
   const [savedProspects, setSavedProspects] = useState([])
   const [view, setView] = useState('search')
+  const [signals, setSignals] = useState(null)
+  const [signalsLoading, setSignalsLoading] = useState(false)
+  const [detailTab, setDetailTab] = useState('scoring')
 
   async function handleSearch(e) {
     e?.preventDefault()
@@ -67,10 +70,30 @@ export default function ProspectionAgent() {
     setLoading(false)
   }
 
+  async function fetchSignals(prospect) {
+    setSignalsLoading(true)
+    setSignals(null)
+    setDetailTab('signals')
+    try {
+      const resp = await fetch('/api/prospect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'signals', prospect })
+      })
+      if (resp.ok) {
+        const data = await resp.json()
+        setSignals(data)
+      }
+    } catch (err) { console.error(err) }
+    setSignalsLoading(false)
+  }
+
   async function handleScore(prospect) {
     setSelectedProspect(prospect)
     setScoring(null)
     setMessage(null)
+    setSignals(null)
+    setDetailTab('scoring')
     setScoringLoading(true)
     try {
       const resp = await fetch('/api/prospect', {
@@ -236,6 +259,11 @@ export default function ProspectionAgent() {
                           color: '#D4AF37', padding: '0.4rem 0.8rem', borderRadius: '6px',
                           cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600
                         }}>🎯 Scorer</button>
+                        <button onClick={e => { e.stopPropagation(); setSelectedProspect(r); fetchSignals(r) }} style={{
+                          background: 'rgba(251,113,133,0.1)', border: '1px solid rgba(251,113,133,0.2)',
+                          color: '#fb7185', padding: '0.4rem 0.8rem', borderRadius: '6px',
+                          cursor: 'pointer', fontSize: '0.75rem', fontWeight: 600
+                        }}>🔥 Signaux</button>
                         {!isSaved && (
                           <button onClick={e => { e.stopPropagation(); saveAsContact(r) }} style={{
                             background: 'rgba(52,211,153,0.1)', border: '1px solid rgba(52,211,153,0.2)',
@@ -266,15 +294,39 @@ export default function ProspectionAgent() {
                   <div style={{ fontSize: '0.78rem', color: '#8ba5b0' }}>{selectedProspect.libelle_activite}</div>
                   <div style={{ fontSize: '0.72rem', color: '#4a6370' }}>📍 {selectedProspect.ville} · {selectedProspect.categorie}</div>
                 </div>
-                <button onClick={() => { setSelectedProspect(null); setScoring(null); setMessage(null) }} style={{ background: 'none', border: 'none', color: '#4a6370', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+                <button onClick={() => { setSelectedProspect(null); setScoring(null); setMessage(null); setSignals(null) }} style={{ background: 'none', border: 'none', color: '#4a6370', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
               </div>
 
+              {/* Onglets */}
+              <div style={{ display: 'flex', gap: '0.3rem', marginBottom: '1.25rem', borderBottom: '1px solid rgba(255,255,255,0.06)', paddingBottom: '0.75rem' }}>
+                <button onClick={() => setDetailTab('scoring')} style={{
+                  flex: 1, padding: '0.45rem', borderRadius: '7px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
+                  background: detailTab === 'scoring' ? 'rgba(212,175,55,0.15)' : 'rgba(255,255,255,0.04)',
+                  color: detailTab === 'scoring' ? '#D4AF37' : '#64808b'
+                }}>🎯 Scoring IA</button>
+                <button onClick={() => { setDetailTab('signals'); if (!signals && !signalsLoading) fetchSignals(selectedProspect) }} style={{
+                  flex: 1, padding: '0.45rem', borderRadius: '7px', border: 'none', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600,
+                  background: detailTab === 'signals' ? 'rgba(251,113,133,0.15)' : 'rgba(255,255,255,0.04)',
+                  color: detailTab === 'signals' ? '#fb7185' : '#64808b'
+                }}>🔥 Signaux{signals ? ` (${signals.signals?.filter(s => s.heat > 0).length})` : ''}</button>
+              </div>
+
+              {/* ===== ONGLET SCORING ===== */}
+              {detailTab === 'scoring' && (<>
               {/* Scoring */}
               {scoringLoading && (
                 <div style={{ textAlign: 'center', padding: '1.5rem' }}>
                   <div style={{ width: 40, height: 40, border: '3px solid rgba(212,175,55,0.2)', borderTopColor: '#D4AF37', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 0.5rem' }} />
                   <div style={{ fontSize: '0.82rem', color: '#D4AF37' }}>🤖 Scoring IA en cours...</div>
                 </div>
+              )}
+
+              {!scoringLoading && !scoring && (
+                <button onClick={() => handleScore(selectedProspect)} style={{
+                  width: '100%', background: 'linear-gradient(135deg, #D4AF37, #c9a02e)',
+                  border: 'none', borderRadius: '8px', color: '#122a33',
+                  padding: '0.6rem', fontWeight: 700, fontSize: '0.88rem', cursor: 'pointer'
+                }}>🎯 Lancer le scoring IA</button>
               )}
 
               {scoring && (
@@ -322,6 +374,87 @@ export default function ProspectionAgent() {
 
                   {scoring.timing && (
                     <div style={{ fontSize: '0.72rem', color: '#4a6370' }}>⏰ {scoring.timing}</div>
+                  )}
+                </div>
+              )}
+              </>)}
+
+              {/* ===== ONGLET SIGNAUX ===== */}
+              {detailTab === 'signals' && (
+                <div>
+                  {signalsLoading && (
+                    <div style={{ textAlign: 'center', padding: '2rem' }}>
+                      <div style={{ width: 40, height: 40, border: '3px solid rgba(251,113,133,0.2)', borderTopColor: '#fb7185', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 0.75rem' }} />
+                      <div style={{ fontSize: '0.82rem', color: '#fb7185' }}>🔍 Analyse des signaux en cours...</div>
+                      <div style={{ fontSize: '0.72rem', color: '#4a6370', marginTop: '0.3rem' }}>Levées de fonds · LinkedIn · Offres IT</div>
+                    </div>
+                  )}
+
+                  {!signalsLoading && signals && (
+                    <div>
+                      {/* Badge chaleur global */}
+                      <div style={{
+                        display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+                        padding: '0.35rem 0.8rem', borderRadius: '20px', marginBottom: '1rem',
+                        background: signals.totalHeat >= 6 ? 'rgba(251,113,133,0.15)' : signals.totalHeat >= 3 ? 'rgba(245,158,11,0.15)' : 'rgba(148,163,184,0.1)',
+                        border: `1px solid ${signals.totalHeat >= 6 ? 'rgba(251,113,133,0.3)' : signals.totalHeat >= 3 ? 'rgba(245,158,11,0.3)' : 'rgba(148,163,184,0.2)'}`,
+                        color: signals.totalHeat >= 6 ? '#fb7185' : signals.totalHeat >= 3 ? '#f59e0b' : '#94a3b8',
+                        fontSize: '0.78rem', fontWeight: 700
+                      }}>
+                        {signals.heatLevel}
+                      </div>
+
+                      {/* Groupes de signaux */}
+                      {['levee_fonds', 'linkedin', 'linkedin_search', 'emploi', 'indeed_search', 'actualite'].map(type => {
+                        const group = signals.signals?.filter(s => s.type === type)
+                        if (!group?.length) return null
+                        const groupLabels = {
+                          levee_fonds: '💰 Levées de fonds',
+                          linkedin: '💼 Activité LinkedIn',
+                          linkedin_search: '🔗 LinkedIn',
+                          emploi: '🧑‍💻 Offres emploi IT',
+                          indeed_search: '🔍 Indeed',
+                          actualite: '📰 Actualités'
+                        }
+                        return (
+                          <div key={type} style={{ marginBottom: '1rem' }}>
+                            <div style={{ fontSize: '0.7rem', fontWeight: 700, color: '#64808b', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.4rem' }}>
+                              {groupLabels[type]}
+                            </div>
+                            {group.map((sig, i) => (
+                              <a key={i} href={sig.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none' }}>
+                                <div style={{
+                                  padding: '0.6rem 0.75rem', borderRadius: '8px', marginBottom: '0.3rem',
+                                  background: sig.heat >= 3 ? 'rgba(251,113,133,0.06)' : sig.heat >= 2 ? 'rgba(245,158,11,0.05)' : 'rgba(255,255,255,0.03)',
+                                  border: `1px solid ${sig.heat >= 3 ? 'rgba(251,113,133,0.15)' : sig.heat >= 2 ? 'rgba(245,158,11,0.12)' : 'rgba(255,255,255,0.06)'}`,
+                                  cursor: sig.link ? 'pointer' : 'default',
+                                  transition: 'all 0.15s'
+                                }}
+                                  onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)'}
+                                  onMouseLeave={e => e.currentTarget.style.background = sig.heat >= 3 ? 'rgba(251,113,133,0.06)' : sig.heat >= 2 ? 'rgba(245,158,11,0.05)' : 'rgba(255,255,255,0.03)'}
+                                >
+                                  <div style={{ fontSize: '0.78rem', color: '#e2e8f0', lineHeight: 1.4, marginBottom: sig.date || sig.source ? '0.2rem' : 0 }}>
+                                    {sig.title}
+                                  </div>
+                                  {(sig.date || sig.source) && (
+                                    <div style={{ fontSize: '0.65rem', color: '#4a6370' }}>
+                                      {sig.source}{sig.source && sig.date ? ' · ' : ''}{sig.date ? new Date(sig.date).toLocaleDateString('fr-FR') : ''}
+                                    </div>
+                                  )}
+                                </div>
+                              </a>
+                            ))}
+                          </div>
+                        )
+                      })}
+
+                      {signals.signals?.filter(s => s.heat > 0).length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '1.5rem', color: '#4a6370', fontSize: '0.82rem' }}>
+                          ❄️ Aucun signal détecté récemment.<br />
+                          <span style={{ fontSize: '0.72rem' }}>Ce prospect n'est pas actif dans la presse ou sur LinkedIn.</span>
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

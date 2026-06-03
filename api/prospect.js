@@ -14,56 +14,199 @@ export default async function handler(req, res) {
 
     // ACTION 1: Search prospects
     if (action === 'search') {
+      // ✅ CORRECTION : suppression de categorie_entreprise qui bloquait tout
+      // L'API gouv.fr ne supporte pas ce filtre en query string de cette façon
       const params = new URLSearchParams({
         q: query || '',
-        par_page: '10',
-        categorie_entreprise: 'PME,ETI'
+        per_page: '20',   // ✅ "per_page" et non "par_page"
       })
       if (req.body.region) params.append('region', req.body.region)
       if (req.body.naf) params.append('activite_principale', req.body.naf)
 
-      const resp = await fetch(`https://recherche-entreprises.api.gouv.fr/search?${params}`)
-      if (!resp.ok) throw new Error('API gouv.fr erreur')
+      const url = `https://recherche-entreprises.api.gouv.fr/search?${params}`
+      console.log('Fetching:', url)
+
+      const resp = await fetch(url)
+      if (!resp.ok) {
+        const errText = await resp.text()
+        console.error('API gouv.fr erreur:', resp.status, errText)
+        throw new Error(`API gouv.fr erreur ${resp.status}`)
+      }
       const data = await resp.json()
+      console.log('Total results:', data.total_results, '| Page results:', data.results?.length)
 
-      const results = (data.results || []).map(r => ({
-        nom: r.nom_complet || r.nom_raison_sociale || '',
-        siren: r.siren || '',
-        siret: r.siege?.siret || '',
-        activite: r.activite_principale || '',
-        libelle_activite: r.libelle_activite_principale || '',
-        categorie: r.categorie_entreprise || '',
-        tranche_effectif: r.tranche_effectif_salarie || '',
-        date_creation: r.date_creation || '',
-        adresse: r.siege?.adresse || '',
-        code_postal: r.siege?.code_postal || '',
-        ville: r.siege?.libelle_commune || '',
-        region: r.siege?.libelle_region || '',
-        etat: r.etat_administratif || '',
-        nature_juridique: r.nature_juridique || '',
-        dirigeants: (r.dirigeants || []).slice(0, 3).map(d => ({
-          nom: d.nom + ' ' + (d.prenoms || ''),
-          qualite: d.qualite || ''
-        }))
-      })).filter(r => r.etat === 'A')
+      const results = (data.results || []).map(r => {
+        // ✅ CORRECTION : les champs sont dans r.siege pour l'adresse
+        const siege = r.siege || {}
+        return {
+          nom: r.nom_complet || r.nom_raison_sociale || '',
+          siren: r.siren || '',
+          siret: siege.siret || '',
+          activite: siege.activite_principale || r.activite_principale || '',
+          libelle_activite: siege.libelle_activite_principale || r.libelle_activite_principale || '',
+          categorie: r.categorie_entreprise || '',
+          tranche_effectif: siege.tranche_effectif_salarie || r.tranche_effectif_salarie || '',
+          date_creation: r.date_creation || '',
+          adresse: siege.adresse || siege.numero_voie && `${siege.numero_voie} ${siege.type_voie} ${siege.libelle_voie}`.trim() || '',
+          code_postal: siege.code_postal || '',
+          ville: siege.libelle_commune || '',
+          region: siege.libelle_region || '',
+          etat: r.etat_administratif || siege.etat_administratif || '',
+          nature_juridique: r.nature_juridique || '',
+          chiffre_affaires: r.chiffre_affaires_annuel_moyen || null,
+          dirigeants: (r.dirigeants || []).slice(0, 3).map(d => ({
+            nom: `${d.nom || ''} ${d.prenoms || ''}`.trim(),
+            qualite: d.qualite || ''
+          }))
+        }
+      })
+      // ✅ Filtre uniquement les entreprises actives
+      .filter(r => r.etat === 'A' || r.etat === '')
 
-      return res.status(200).json({ success: true, results })
+      console.log('Filtered results:', results.length)
+      return res.status(200).json({ success: true, results, total: data.total_results || results.length })
+    }
+
+    // ACTION 4: Fetch buying signals (levées de fonds, LinkedIn, offres IT)
+    if (action === 'signals') {
+      const { nom, dirigeants = [], siren } = req.body.prospect || {}
+      const signals = []
+
+      // Helper: parse Google News RSS
+      async function fetchRSS(url) {
+        try {
+          const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+          if (!r.ok) return []
+          const xml = await r.text()
+          const items = []
+          const itemRegex = /<item>([\s\S]*?)<\/item>/g
+          let m
+          while ((m = itemRegex.exec(xml)) !== null) {
+            const block = m[1]
+            const title = (/<title><!\[CDATA\[(.*?)\]\]><\/title>/.exec(block) || /<title>(.*?)<\/title>/.exec(block) || [])[1] || ''
+            const link  = (/<link>(.*?)<\/link>/.exec(block) || [])[1] || ''
+            const date  = (/<pubDate>(.*?)<\/pubDate>/.exec(block) || [])[1] || ''
+            const source = (/<source[^>]*>(.*?)<\/source>/.exec(block) || [])[1] || ''
+            if (title) items.push({ title: title.trim(), link: link.trim(), date: date.trim(), source: source.trim() })
+          }
+          return items.slice(0, 5)
+        } catch { return [] }
+      }
+
+      // 1. Levées de fonds
+      const fundsQuery = encodeURIComponent(`"${nom}" levée de fonds OR financement OR investissement OR série`)
+      const fundsItems = await fetchRSS(`https://news.google.com/rss/search?q=${fundsQuery}&hl=fr&gl=FR&ceid=FR:fr`)
+      for (const item of fundsItems) {
+        signals.push({
+          type: 'levee_fonds',
+          icon: '💰',
+          label: 'Levée de fonds',
+          title: item.title,
+          link: item.link,
+          date: item.date,
+          source: item.source,
+          heat: 3
+        })
+      }
+
+      // 2. Actualités presse générale sur l'entreprise
+      const newsQuery = encodeURIComponent(`"${nom}" expansion OR croissance OR transformation OR digital OR SI OR recrutement`)
+      const newsItems = await fetchRSS(`https://news.google.com/rss/search?q=${newsQuery}&hl=fr&gl=FR&ceid=FR:fr`)
+      for (const item of newsItems.slice(0, 3)) {
+        signals.push({
+          type: 'actualite',
+          icon: '📰',
+          label: 'Actualité',
+          title: item.title,
+          link: item.link,
+          date: item.date,
+          source: item.source,
+          heat: 1
+        })
+      }
+
+      // 3. Posts / activité LinkedIn du dirigeant principal
+      const dirigeant = dirigeants[0]
+      if (dirigeant?.nom) {
+        const liQuery = encodeURIComponent(`"${dirigeant.nom}" site:linkedin.com OR recrutement IT OR DSI OR transformation numérique`)
+        const liItems = await fetchRSS(`https://news.google.com/rss/search?q=${liQuery}&hl=fr&gl=FR&ceid=FR:fr`)
+        for (const item of liItems.slice(0, 3)) {
+          signals.push({
+            type: 'linkedin',
+            icon: '💼',
+            label: `LinkedIn – ${dirigeant.nom}`,
+            title: item.title,
+            link: item.link,
+            date: item.date,
+            source: item.source,
+            heat: 2
+          })
+        }
+        // Recherche directe LinkedIn
+        signals.push({
+          type: 'linkedin_search',
+          icon: '🔗',
+          label: 'Rechercher sur LinkedIn',
+          title: `Voir le profil de ${dirigeant.nom}`,
+          link: `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(dirigeant.nom)}`,
+          date: '',
+          source: 'LinkedIn',
+          heat: 0
+        })
+      }
+
+      // 4. Offres d'emploi IT (Indeed / Google News)
+      const jobsQuery = encodeURIComponent(`"${nom}" recrutement OR "offre d'emploi" développeur OR DSI OR informatique OR cloud OR data`)
+      const jobsItems = await fetchRSS(`https://news.google.com/rss/search?q=${jobsQuery}&hl=fr&gl=FR&ceid=FR:fr`)
+      for (const item of jobsItems.slice(0, 3)) {
+        signals.push({
+          type: 'emploi',
+          icon: '🧑‍💻',
+          label: 'Offre emploi IT',
+          title: item.title,
+          link: item.link,
+          date: item.date,
+          source: item.source,
+          heat: 2
+        })
+      }
+      // Lien direct recherche Indeed
+      signals.push({
+        type: 'indeed_search',
+        icon: '🔍',
+        label: 'Rechercher offres IT',
+        title: `Voir les offres IT de ${nom} sur Indeed`,
+        link: `https://fr.indeed.com/emplois?q=informatique+developpeur+data&l=${encodeURIComponent(nom)}`,
+        date: '',
+        source: 'Indeed',
+        heat: 0
+      })
+
+      // Score de chaleur global
+      const totalHeat = signals.reduce((acc, s) => acc + (s.heat || 0), 0)
+      const heatLevel = totalHeat >= 6 ? 'Très chaud 🔥🔥' : totalHeat >= 3 ? 'Chaud 🔥' : totalHeat >= 1 ? 'Tiède 🌡️' : 'Froid ❄️'
+
+      return res.status(200).json({ success: true, signals, heatLevel, totalHeat })
     }
 
     // ACTION 2: Score a prospect
     if (action === 'score' && prospect && ANTHROPIC_KEY) {
       let claudeResp = null
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         claudeResp = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ANTHROPIC_KEY,
+            'anthropic-version': '2023-06-01'
+          },
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 600,
             system: `Tu es un expert en prospection commerciale pour Joker Team, une ESN/agence IT specialisee dans le placement de freelances IT.
 Tu evalues si une entreprise PME/ETI est un bon prospect pour des prestations IT (developpement, infra, data, cloud, cybersecurite, modernisation SI).
 
-Analyse l'entreprise et reponds UNIQUEMENT en JSON :
+Analyse l'entreprise et reponds UNIQUEMENT en JSON valide, sans markdown :
 {
   "score": 75,
   "potentiel": "Fort|Moyen|Faible",
@@ -78,16 +221,20 @@ Analyse l'entreprise et reponds UNIQUEMENT en JSON :
           })
         })
         if (claudeResp.ok || claudeResp.status !== 529) break
-        await new Promise(r => setTimeout(r, 2000))
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)))
       }
 
       if (claudeResp && claudeResp.ok) {
         const data = await claudeResp.json()
         let content = data.content?.[0]?.text || '{}'
         content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
-        return res.status(200).json({ success: true, scoring: JSON.parse(content) })
+        try {
+          return res.status(200).json({ success: true, scoring: JSON.parse(content) })
+        } catch {
+          return res.status(200).json({ success: true, scoring: { score: 50, potentiel: 'Non evalue', raisons: [], signaux_achat: [] } })
+        }
       }
-      return res.status(200).json({ success: true, scoring: { score: 50, potentiel: 'Non evalue' } })
+      return res.status(200).json({ success: true, scoring: { score: 50, potentiel: 'Non evalue', raisons: [], signaux_achat: [] } })
     }
 
     // ACTION 3: Generate prospection message
@@ -122,10 +269,14 @@ Regles :
       }
 
       let claudeResp = null
-      for (let attempt = 0; attempt < 2; attempt++) {
+      for (let attempt = 0; attempt < 3; attempt++) {
         claudeResp = await fetch('https://api.anthropic.com/v1/messages', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-api-key': ANTHROPIC_KEY, 'anthropic-version': '2023-06-01' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': ANTHROPIC_KEY,
+            'anthropic-version': '2023-06-01'
+          },
           body: JSON.stringify({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 800,
@@ -137,9 +288,9 @@ ${toneInstructions[tone] || toneInstructions.direct}
 
 ${prospect.scoring?.angle_approche ? 'Angle recommande : ' + prospect.scoring.angle_approche : ''}
 
-Reponds UNIQUEMENT en JSON :
+Reponds UNIQUEMENT en JSON valide, sans markdown :
 {
-  "subject": "Objet de l'email (si email)",
+  "subject": "Objet de l'email (si email, sinon null)",
   "body": "Corps du message",
   "followup": "Message de relance (J+3)"
 }`,
@@ -147,14 +298,18 @@ Reponds UNIQUEMENT en JSON :
           })
         })
         if (claudeResp.ok || claudeResp.status !== 529) break
-        await new Promise(r => setTimeout(r, 2000))
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)))
       }
 
       if (claudeResp && claudeResp.ok) {
         const data = await claudeResp.json()
         let content = data.content?.[0]?.text || '{}'
         content = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim()
-        return res.status(200).json({ success: true, message: JSON.parse(content) })
+        try {
+          return res.status(200).json({ success: true, message: JSON.parse(content) })
+        } catch {
+          return res.status(500).json({ error: 'Parsing JSON echoue' })
+        }
       }
       return res.status(500).json({ error: 'Generation indisponible' })
     }
