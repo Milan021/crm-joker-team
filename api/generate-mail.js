@@ -58,7 +58,7 @@ export default async function handler(req, res) {
         'anthropic-version': '2023-06-01'
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-5',
         max_tokens: 1500,
         system: `Tu es un expert en rédaction de mails commerciaux B2B pour Joker Team, une ESN (Entreprise de Services du Numérique) basée en France.
 
